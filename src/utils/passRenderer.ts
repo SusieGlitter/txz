@@ -8,6 +8,8 @@ export const CARD_HEIGHT = 1180;
 // Asset Cache for PSD images
 const imageCache: Map<string, HTMLImageElement | null> = new Map();
 
+import { PSD_ASSETS } from '../data/imageAssets';
+
 /**
  * Safely check if an HTMLImageElement is valid and ready to draw
  */
@@ -24,8 +26,18 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
       resolve(null);
       return;
     }
-    if (imageCache.has(src)) {
-      const cached = imageCache.get(src);
+
+    let actualSrc = src;
+    if (src.includes('psd_assets/')) {
+      const parts = src.split('/');
+      const filename = parts[parts.length - 1];
+      if (PSD_ASSETS[filename]) {
+        actualSrc = PSD_ASSETS[filename];
+      }
+    }
+
+    if (imageCache.has(actualSrc)) {
+      const cached = imageCache.get(actualSrc);
       if (isImageValid(cached)) {
         resolve(cached);
       } else {
@@ -37,10 +49,12 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-        imageCache.set(src, img);
+        imageCache.set(actualSrc, img);
+        if (src !== actualSrc) imageCache.set(src, img);
         resolve(img);
       } else {
-        imageCache.set(src, null);
+        imageCache.set(actualSrc, null);
+        if (src !== actualSrc) imageCache.set(src, null);
         resolve(null);
       }
     };
