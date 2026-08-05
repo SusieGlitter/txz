@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "name": "图层 1",
     "path": "图层 1",
@@ -10,7 +10,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/图层_1.png"
+    "assetUrl": "/txz/psd_assets/图层_1.png"
   },
   {
     "name": "图层 2",
@@ -23,7 +23,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/图层_2.png"
+    "assetUrl": "/txz/psd_assets/图层_2.png"
   },
   {
     "name": "背面",
@@ -60,7 +60,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/背面__装饰__饰边.png"
+    "assetUrl": "/txz/psd_assets/背面__装饰__饰边.png"
   },
   {
     "name": "条码",
@@ -73,7 +73,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/背面__装饰__条码.png"
+    "assetUrl": "/txz/psd_assets/背面__装饰__条码.png"
   },
   {
     "name": "渐变条纹",
@@ -86,7 +86,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/背面__装饰__渐变条纹.png"
+    "assetUrl": "/txz/psd_assets/背面__装饰__渐变条纹.png"
   },
   {
     "name": "文字",
@@ -133,7 +133,7 @@
         1012
       ]
     },
-    "assetUrl": "/psd_assets/背面__文字__ARKNIGHTS_-_MN04.png"
+    "assetUrl": "/txz/psd_assets/背面__文字__ARKNIGHTS_-_MN04.png"
   },
   {
     "name": "GUARD/RHODES ISLAND",
@@ -168,7 +168,7 @@
         691.5000000000001
       ]
     },
-    "assetUrl": "/psd_assets/背面__文字__GUARD_RHODES_ISLAND.png"
+    "assetUrl": "/txz/psd_assets/背面__文字__GUARD_RHODES_ISLAND.png"
   },
   {
     "name": "商标",
@@ -181,7 +181,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/背面__文字__商标.png"
+    "assetUrl": "/txz/psd_assets/背面__文字__商标.png"
   },
   {
     "name": "generated_barcode",
@@ -194,7 +194,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/背面__generated_barcode.png"
+    "assetUrl": "/txz/psd_assets/背面__generated_barcode.png"
   },
   {
     "name": "中间",
@@ -231,7 +231,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__精一底板.png"
+    "assetUrl": "/txz/psd_assets/中间__精一底板.png"
   },
   {
     "name": "阵营图标",
@@ -256,7 +256,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__罗德岛.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__罗德岛.png"
   },
   {
     "name": "卡西米尔",
@@ -269,7 +269,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__卡西米尔.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__卡西米尔.png"
   },
   {
     "name": "岁",
@@ -282,7 +282,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__岁.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__岁.png"
   },
   {
     "name": "炎",
@@ -295,7 +295,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__炎.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__炎.png"
   },
   {
     "name": "莱茵生命",
@@ -308,7 +308,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__莱茵生命.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__莱茵生命.png"
   },
   {
     "name": "使徒",
@@ -321,7 +321,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__使徒.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__使徒.png"
   },
   {
     "name": "深海猎人",
@@ -334,7 +334,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__深海猎人.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__深海猎人.png"
   },
   {
     "name": "萨米",
@@ -347,7 +347,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__萨米.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__萨米.png"
   },
   {
     "name": "汐斯塔",
@@ -360,7 +360,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__汐斯塔.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__汐斯塔.png"
   },
   {
     "name": "拉特兰",
@@ -373,7 +373,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__拉特兰.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__拉特兰.png"
   },
   {
     "name": "莱塔尼亚",
@@ -386,7 +386,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__莱塔尼亚.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__莱塔尼亚.png"
   },
   {
     "name": "萨尔贡",
@@ -399,7 +399,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__萨尔贡.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__萨尔贡.png"
   },
   {
     "name": "企鹅物流",
@@ -412,7 +412,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__企鹅物流.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__企鹅物流.png"
   },
   {
     "name": "黑钢国际",
@@ -425,7 +425,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__黑钢国际.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__黑钢国际.png"
   },
   {
     "name": "鲤氏",
@@ -438,7 +438,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__鲤氏.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__鲤氏.png"
   },
   {
     "name": "东国",
@@ -451,7 +451,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__东国.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__东国.png"
   },
   {
     "name": "sweep",
@@ -464,7 +464,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__sweep.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__sweep.png"
   },
   {
     "name": "叙拉古",
@@ -477,7 +477,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__叙拉古.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__叙拉古.png"
   },
   {
     "name": "雷姆必拓",
@@ -490,7 +490,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__雷姆必拓.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__雷姆必拓.png"
   },
   {
     "name": "维多利亚",
@@ -503,7 +503,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__维多利亚.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__维多利亚.png"
   },
   {
     "name": "哥伦比亚",
@@ -516,7 +516,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__哥伦比亚.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__哥伦比亚.png"
   },
   {
     "name": "喀兰贸易",
@@ -529,7 +529,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__喀兰贸易.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__喀兰贸易.png"
   },
   {
     "name": "乌萨斯",
@@ -542,7 +542,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__乌萨斯.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__乌萨斯.png"
   },
   {
     "name": "龙门近卫局",
@@ -555,7 +555,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/中间__阵营图标__龙门近卫局.png"
+    "assetUrl": "/txz/psd_assets/中间__阵营图标__龙门近卫局.png"
   },
   {
     "name": "正面",
@@ -592,7 +592,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__装饰图案__饰边.png"
+    "assetUrl": "/txz/psd_assets/正面__装饰图案__饰边.png"
   },
   {
     "name": "明日方舟",
@@ -605,7 +605,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__装饰图案__明日方舟.png"
+    "assetUrl": "/txz/psd_assets/正面__装饰图案__明日方舟.png"
   },
   {
     "name": "渐变条纹",
@@ -618,7 +618,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__装饰图案__渐变条纹.png"
+    "assetUrl": "/txz/psd_assets/正面__装饰图案__渐变条纹.png"
   },
   {
     "name": "文字",
@@ -665,7 +665,7 @@
         1013.0721345200445
       ]
     },
-    "assetUrl": "/psd_assets/正面__文字__ARKNIGHTS_-_R001_.png"
+    "assetUrl": "/txz/psd_assets/正面__文字__ARKNIGHTS_-_R001_.png"
   },
   {
     "name": "generated_barcode",
@@ -678,7 +678,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__文字__generated_barcode.png"
+    "assetUrl": "/txz/psd_assets/正面__文字__generated_barcode.png"
   },
   {
     "name": "AMIYA",
@@ -713,7 +713,7 @@
         692.707305428202
       ]
     },
-    "assetUrl": "/psd_assets/正面__文字__AMIYA.png"
+    "assetUrl": "/txz/psd_assets/正面__文字__AMIYA.png"
   },
   {
     "name": "ARKNIGHTS - R001",
@@ -748,7 +748,7 @@
         766.6760959205462
       ]
     },
-    "assetUrl": "/psd_assets/正面__文字__ARKNIGHTS_-_R001.png"
+    "assetUrl": "/txz/psd_assets/正面__文字__ARKNIGHTS_-_R001.png"
   },
   {
     "name": "GUARD/RHODES ISLAND",
@@ -783,7 +783,7 @@
         1130.6891752578713
       ]
     },
-    "assetUrl": "/psd_assets/正面__文字__GUARD_RHODES_ISLAND.png"
+    "assetUrl": "/txz/psd_assets/正面__文字__GUARD_RHODES_ISLAND.png"
   },
   {
     "name": "the omertosa",
@@ -818,7 +818,7 @@
         723.1944420500465
       ]
     },
-    "assetUrl": "/psd_assets/正面__文字__the_omertosa.png"
+    "assetUrl": "/txz/psd_assets/正面__文字__the_omertosa.png"
   },
   {
     "name": "职业图标",
@@ -843,7 +843,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__职业图标__近卫图标.png"
+    "assetUrl": "/txz/psd_assets/正面__职业图标__近卫图标.png"
   },
   {
     "name": "狙击",
@@ -856,7 +856,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__职业图标__狙击.png"
+    "assetUrl": "/txz/psd_assets/正面__职业图标__狙击.png"
   },
   {
     "name": "特种",
@@ -869,7 +869,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__职业图标__特种.png"
+    "assetUrl": "/txz/psd_assets/正面__职业图标__特种.png"
   },
   {
     "name": "辅助图标",
@@ -882,7 +882,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__职业图标__辅助图标.png"
+    "assetUrl": "/txz/psd_assets/正面__职业图标__辅助图标.png"
   },
   {
     "name": "重装",
@@ -895,7 +895,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__职业图标__重装.png"
+    "assetUrl": "/txz/psd_assets/正面__职业图标__重装.png"
   },
   {
     "name": "先锋",
@@ -908,7 +908,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__职业图标__先锋.png"
+    "assetUrl": "/txz/psd_assets/正面__职业图标__先锋.png"
   },
   {
     "name": "医疗",
@@ -921,7 +921,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__职业图标__医疗.png"
+    "assetUrl": "/txz/psd_assets/正面__职业图标__医疗.png"
   },
   {
     "name": "术士",
@@ -934,7 +934,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__职业图标__术士.png"
+    "assetUrl": "/txz/psd_assets/正面__职业图标__术士.png"
   },
   {
     "name": "切割线",
@@ -947,7 +947,7 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/正面__切割线.png"
+    "assetUrl": "/txz/psd_assets/正面__切割线.png"
   },
   {
     "name": "刀线",
@@ -960,6 +960,6 @@
     "opacity": 1,
     "blendMode": "normal",
     "text": null,
-    "assetUrl": "/psd_assets/刀线.png"
+    "assetUrl": "/txz/psd_assets/刀线.png"
   }
 ]
