@@ -50,6 +50,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const [lightIntensity, setLightIntensity] = useState<number>(1.2);
   const [isPreloading, setIsPreloading] = useState<boolean>(true);
   const [isUpdatingTextures, setIsUpdatingTextures] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   // Hidden offscreen canvas refs for texture rendering
   const frontCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -78,6 +79,32 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
 
   // Track loaded asset URLs to avoid redundant draw operations
   const [canvasKey, setCanvasKey] = useState<number>(0);
+
+  const toggleFullscreen = async () => {
+    const target = containerRef.current;
+    if (!target) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        await target.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (error) {
+      console.error('Fullscreen toggle failed:', error);
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // 1. Initial preload of PSD assets and fonts
   useEffect(() => {
@@ -682,6 +709,14 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
             title="重置视角"
           >
             <Maximize2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition"
+            title={isFullscreen ? '退出全屏' : '全屏预览'}
+            aria-label={isFullscreen ? '退出全屏' : '全屏预览'}
+          >
+            {isFullscreen ? <Maximize2 className="w-4 h-4 rotate-180" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
 
