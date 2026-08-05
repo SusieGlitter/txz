@@ -382,7 +382,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       clearcoat: 1.0,
       clearcoatRoughness: 0.02,
       specularIntensity: 2.0,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
       depthWrite: false, // Transparent glass shouldn't block depth-test of objects behind it
     });
 
@@ -398,7 +398,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       clearcoat: 0.1, // Low clearcoat on frosted side
       clearcoatRoughness: 0.6,
       specularIntensity: 0.3,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
       depthWrite: false,
     });
 
