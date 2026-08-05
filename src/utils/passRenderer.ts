@@ -62,7 +62,7 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
       imageCache.set(src, null);
       resolve(null);
     };
-    img.src = src;
+    img.src = actualSrc;
   });
 }
 
