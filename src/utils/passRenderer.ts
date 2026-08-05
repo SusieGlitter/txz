@@ -930,7 +930,8 @@ export function getDiecutMask(): Promise<HTMLCanvasElement | null> {
         }
       }
 
-      // Pass 1: identify the transparent outside region connected to the image border
+      // Pass 1: find the outer transparent background connected to the image border.
+      // This region is outside the acrylic plate and should remain transparent.
       while (head < tail) {
         const curr = queue[head++];
         const cx = curr % w;
@@ -956,57 +957,73 @@ export function getDiecutMask(): Promise<HTMLCanvasElement | null> {
         }
       }
 
-      // Pass 2: from the main body connected to the diecut contour, keep only the large connected body.
-      // This removes internal circular holes because they are not connected to the outer contour.
-      const bodyVisited = new Uint8Array(w * h);
-      const bodyQueue = new Int32Array(w * h);
-      let bodyHead = 0;
-      let bodyTail = 0;
+      // Pass 2: find all enclosed transparent regions that are NOT connected to the outer background.
+      // These are true holes, such as inner circular cutouts. They must remain transparent.
+      const holeVisited = new Uint8Array(w * h);
+      const holeQueue = new Int32Array(w * h);
+      let holeHead = 0;
+      let holeTail = 0;
 
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const idx = y * w + x;
+          if (visited[idx] || holeVisited[idx]) continue;
           const alpha = data[idx * 4 + 3];
-          const isSolid = alpha > 50;
-          const onBorder = x === 0 || x === w - 1 || y === 0 || y === h - 1;
+          if (alpha >= 50) continue;
 
-          if (isSolid && onBorder && !visited[idx]) {
-            bodyVisited[idx] = 1;
-            bodyQueue[bodyTail++] = idx;
-          }
-        }
-      }
+          const regionQueue = new Int32Array(w * h);
+          let regionHead = 0;
+          let regionTail = 0;
+          let touchesBorder = false;
 
-      while (bodyHead < bodyTail) {
-        const curr = bodyQueue[bodyHead++];
-        const cx = curr % w;
-        const cy = Math.floor(curr / w);
+          regionQueue[regionTail++] = idx;
+          holeVisited[idx] = 1;
 
-        const nxs = [cx - 1, cx + 1, cx, cx];
-        const nys = [cy, cy, cy - 1, cy + 1];
+          while (regionHead < regionTail) {
+            const curr = regionQueue[regionHead++];
+            const cx = curr % w;
+            const cy = Math.floor(curr / w);
+            if (cx === 0 || cx === w - 1 || cy === 0 || cy === h - 1) touchesBorder = true;
 
-        for (let i = 0; i < 4; i++) {
-          const nx = nxs[i];
-          const ny = nys[i];
+            const nxs = [cx - 1, cx + 1, cx, cx];
+            const nys = [cy, cy, cy - 1, cy + 1];
 
-          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-            const nidx = ny * w + nx;
-            if (!bodyVisited[nidx]) {
-              const alpha = data[nidx * 4 + 3];
-              if (alpha > 50 && !visited[nidx]) {
-                bodyVisited[nidx] = 1;
-                bodyQueue[bodyTail++] = nidx;
+            for (let i = 0; i < 4; i++) {
+              const nx = nxs[i];
+              const ny = nys[i];
+              if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                const nidx = ny * w + nx;
+                if (!holeVisited[nidx]) {
+                  const nAlpha = data[nidx * 4 + 3];
+                  if (nAlpha < 50) {
+                    holeVisited[nidx] = 1;
+                    regionQueue[regionTail++] = nidx;
+                  }
+                }
               }
+            }
+          }
+
+          if (!touchesBorder) {
+            for (let i = 0; i < regionTail; i++) {
+              holeQueue[holeTail++] = regionQueue[i];
             }
           }
         }
       }
 
-      // Final mask: keep only the large connected body; transparent outside + inside holes are both cut away.
+      // Final mask: keep all solid pixels except those inside enclosed transparent holes.
       const maskImgData = tempCtx.createImageData(w, h);
       const mData = maskImgData.data;
+      const holeSet = new Uint8Array(w * h);
+      for (let i = 0; i < holeTail; i++) {
+        holeSet[holeQueue[i]] = 1;
+      }
+
       for (let i = 0; i < w * h; i++) {
-        if (bodyVisited[i] === 1) {
+        const alpha = data[i * 4 + 3];
+        const isHole = holeSet[i] === 1;
+        if (alpha > 50 && !isHole) {
           mData[i * 4] = 255;
           mData[i * 4 + 1] = 255;
           mData[i * 4 + 2] = 255;

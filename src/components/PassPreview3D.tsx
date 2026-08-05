@@ -370,6 +370,8 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     const acrylicGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
     acrylicGeo.center(); // Center geometry around (0,0,0) so front face is at +halfD and back is at -halfD
 
+    // The diecut mask may contain holes (e.g. circular openings). We should respect that in 3D as well.
+    // We use the same mask as a cutout alpha on the transparent acrylic body so the interior holes do not appear solid.
     const capMat = new THREE.MeshPhysicalMaterial({
       color: new THREE.Color('#ffffff'),
       roughness: 0.02,
