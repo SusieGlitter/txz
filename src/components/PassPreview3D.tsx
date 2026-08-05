@@ -399,14 +399,14 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       roughness: 0.02,
       metalness: 0.0,
       transparent: true,
-      opacity: 0.08, // Very clear on flat faces
+      opacity: 1.0,
       transmission: 0.98,
       ior: 1.49,
       thickness: thickness,
       clearcoat: 1.0,
       clearcoatRoughness: 0.02,
-      specularIntensity: 2.0,
-      side: THREE.DoubleSide,
+      specularIntensity: 1.0,
+      side: THREE.FrontSide,
       depthWrite: false, // Transparent glass shouldn't block depth-test of objects behind it
     });
 
@@ -415,14 +415,14 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       roughness: 0.9, // Higher roughness for a very frosted / matte laser-cut look!
       metalness: 0.0,
       transparent: true,
-      opacity: 0.75, // Milkier/frosted edge opacity
+      opacity: 1.0,
       transmission: 0.1, // Lower transmission because it's frosted/scattered
       ior: 1.49,
       thickness: thickness,
       clearcoat: 0.1, // Low clearcoat on frosted side
       clearcoatRoughness: 0.6,
       specularIntensity: 0.3,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
       depthWrite: false,
     });
 
