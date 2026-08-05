@@ -203,6 +203,25 @@ export default function App() {
               <h1 className="text-lg font-bold text-white tracking-tight">
                 通行证生成器
               </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-300">
+                <span className="text-slate-400">友情链接：</span>
+                <a
+                  href="https://www.xiaohongshu.com/user/profile/6483dfa60000000011000f32"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-cyan-300 hover:text-cyan-200 transition"
+                >
+                  小红书@Y教主黄铜
+                </a>
+                <a
+                  href="https://github.com/SusieGlitter/txz"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-violet-300 hover:text-violet-200 transition"
+                >
+                  github@SusieGlitter
+                </a>
+              </div>
             </div>
           </div>
 
