@@ -357,14 +357,18 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     const shape = createRoundedRect(w, h, radius);
 
     // 1. Acrylic Base Mesh
+    // The acrylic plate should be treated as a straight swept solid generated from the boundary contour:
+    // - top face: the plate face area
+    // - side wall: the vertical extrusion of the boundary edges along thickness
+    // - no bevel: the manufacturing boundary is kept sharp and square
     const extrudeSettings = {
       steps: 1,
-      depth: 1.0, // Base depth of 1.0, we scale.z dynamically
-      bevelEnabled: true,
-      bevelThickness: 0.05,
-      bevelSize: 0.04,
+      depth: 1.0,
+      bevelEnabled: false,
+      bevelThickness: 0,
+      bevelSize: 0,
       bevelOffset: 0,
-      bevelSegments: 4,
+      bevelSegments: 0,
     };
 
     const acrylicGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
@@ -384,7 +388,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       clearcoat: 1.0,
       clearcoatRoughness: 0.02,
       specularIntensity: 2.0,
-      side: THREE.FrontSide,
+      side: THREE.DoubleSide,
       depthWrite: false, // Transparent glass shouldn't block depth-test of objects behind it
     });
 
@@ -400,7 +404,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       clearcoat: 0.1, // Low clearcoat on frosted side
       clearcoatRoughness: 0.6,
       specularIntensity: 0.3,
-      side: THREE.FrontSide,
+      side: THREE.DoubleSide,
       depthWrite: false,
     });
 
