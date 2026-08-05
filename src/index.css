@@ -2,26 +2,26 @@
 
 @font-face {
   font-family: 'BebasNeue';
-  src: url('./assets/fonts/BebasNeue-Regular.otf') format('opentype');
+  src: url('/fonts/BebasNeue-Regular.otf') format('opentype');
   font-display: swap;
 }
 
 @font-face {
   font-family: 'NotoSansHans-Bold';
-  src: url('./assets/fonts/NotoSansHans-Bold.otf') format('opentype');
+  src: url('/fonts/NotoSansHans-Bold.otf') format('opentype');
   font-weight: bold;
   font-display: swap;
 }
 
 @font-face {
   font-family: 'AdobeHeitiStd';
-  src: url('./assets/fonts/AdobeHeitiStd-Regular.otf') format('opentype');
+  src: url('/fonts/AdobeHeitiStd-Regular.otf') format('opentype');
   font-display: swap;
 }
 
 @font-face {
   font-family: 'NotoSansHans-Medium';
-  src: url('./assets/fonts/AdobeHeitiStd-Regular.otf') format('opentype');
+  src: url('/fonts/AdobeHeitiStd-Regular.otf') format('opentype');
   font-display: swap;
 }
 

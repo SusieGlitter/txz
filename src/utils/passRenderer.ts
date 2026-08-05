@@ -33,6 +33,17 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
       const filename = parts[parts.length - 1];
       if (PSD_ASSETS[filename]) {
         actualSrc = PSD_ASSETS[filename];
+      } else {
+        const c = document.createElement('canvas');
+        c.width = 100;
+        c.height = 100;
+        const cx = c.getContext('2d');
+        if (cx) {
+          cx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          cx.fillRect(10, 10, 80, 80);
+          PSD_ASSETS[filename] = c.toDataURL('image/png');
+          actualSrc = PSD_ASSETS[filename];
+        }
       }
     }
 
@@ -127,11 +138,42 @@ export async function preloadPsdAssets() {
   await Promise.all(assets.map(url => loadImage(url)));
 
   // Ensure OTF fonts from /fonts are loaded for Canvas rendering
-  if (typeof document !== 'undefined' && document.fonts) {
+  if (typeof document !== 'undefined' && typeof FontFace !== 'undefined') {
+    try {
+      const fontsList = Array.from(document.fonts.values());
+      const hasBebas = fontsList.some(f => f.family === 'BebasNeue');
+      if (!hasBebas) {
+        const bebasNeueFont = new FontFace('BebasNeue', 'url(/fonts/BebasNeue-Regular.otf)');
+        const loadedFont = await bebasNeueFont.load();
+        document.fonts.add(loadedFont);
+      }
+      const hasNotoBold = fontsList.some(f => f.family === 'NotoSansHans-Bold');
+      if (!hasNotoBold) {
+        const notoBoldFont = new FontFace('NotoSansHans-Bold', 'url(/fonts/NotoSansHans-Bold.otf)', { weight: 'bold' });
+        const loadedFont = await notoBoldFont.load();
+        document.fonts.add(loadedFont);
+      }
+      const hasHeiti = fontsList.some(f => f.family === 'AdobeHeitiStd');
+      if (!hasHeiti) {
+        const heitiFont = new FontFace('AdobeHeitiStd', 'url(/fonts/AdobeHeitiStd-Regular.otf)');
+        const loadedFont = await heitiFont.load();
+        document.fonts.add(loadedFont);
+      }
+      const hasNotoMedium = fontsList.some(f => f.family === 'NotoSansHans-Medium');
+      if (!hasNotoMedium) {
+        const notoMediumFont = new FontFace('NotoSansHans-Medium', 'url(/fonts/NotoSansHans-Medium.otf)');
+        const loadedFont = await notoMediumFont.load();
+        document.fonts.add(loadedFont);
+      }
+      await document.fonts.ready;
+    } catch (err) {
+      console.warn('Programmatic font loading notice:', err);
+    }
+  } else if (typeof document !== 'undefined' && document.fonts) {
     try {
       await Promise.all([
-        document.fonts.load('84px "BebasNeue"'),
-        document.fonts.load('16px "NotoSansHans-Bold"'),
+        document.fonts.load('85px "BebasNeue"'),
+        document.fonts.load('17px "NotoSansHans-Bold"'),
         document.fonts.load('16px "AdobeHeitiStd"'),
         document.fonts.load('16px "NotoSansHans-Medium"'),
       ]);
@@ -161,18 +203,20 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
  * Get Profession Icon URL based on key
  */
 function getProfessionIconUrl(prof: string): string {
+  let key = '正面__职业图标__近卫图标.png';
   switch (prof) {
-    case '近卫': return './psd_assets/正面__职业图标__近卫图标.png';
-    case '狙击': return './psd_assets/正面__职业图标__狙击.png';
-    case '特种': return './psd_assets/正面__职业图标__特种.png';
-    case '辅助': return './psd_assets/正面__职业图标__辅助图标.png';
-    case '重装': return './psd_assets/正面__职业图标__重装.png';
-    case '先锋': return './psd_assets/正面__职业图标__先锋.png';
-    case '医疗': return './psd_assets/正面__职业图标__医疗.png';
+    case '近卫': key = '正面__职业图标__近卫图标.png'; break;
+    case '狙击': key = '正面__职业图标__狙击.png'; break;
+    case '特种': key = '正面__职业图标__特种.png'; break;
+    case '辅助': key = '正面__职业图标__辅助图标.png'; break;
+    case '重装': key = '正面__职业图标__重装.png'; break;
+    case '先锋': key = '正面__职业图标__先锋.png'; break;
+    case '医疗': key = '正面__职业图标__医疗.png'; break;
     case '术士':
-    case '术师': return './psd_assets/正面__职业图标__术士.png';
-    default: return './psd_assets/正面__职业图标__近卫图标.png';
+    case '术师': key = '正面__职业图标__术士.png'; break;
+    default: key = '正面__职业图标__近卫图标.png'; break;
   }
+  return PSD_ASSETS[key] ?? '';
 }
 
 /**
@@ -253,7 +297,10 @@ function getFactionIconUrl(factionName: string): string | null {
   };
 
   for (const k in map) {
-    if (name.includes(k)) return PSD_ASSETS[map[k]] ?? PSD_ASSETS['中间__阵营图标__罗德岛.png'] ?? null;
+    if (name.includes(k)) {
+      const filename = map[k];
+      return PSD_ASSETS[filename] ?? PSD_ASSETS['中间__阵营图标__罗德岛.png'] ?? null;
+    }
   }
   return PSD_ASSETS['中间__阵营图标__罗德岛.png'] ?? null;
 }
@@ -453,7 +500,7 @@ export async function renderFrontCard(
     ctx.save();
     ctx.translate(83, 1013);
     ctx.rotate(Math.PI / 2);
-    ctx.font = 'bold 16.67px "NotoSansHans-Bold", sans-serif';
+    ctx.font = 'bold 17px "NotoSansHans-Bold", sans-serif';
     ctx.fillStyle = barcodeColor;
     ctx.textBaseline = 'top';
     ctx.fillText(`ARKNIGHTS - ${info.id || 'R001'}`, 0, 0);
@@ -498,7 +545,7 @@ export async function renderFrontCard(
 
     ctx.save();
     ctx.fillStyle = '#ffffff';
-    ctx.font = '500 16.125px "NotoSansHans-Medium", sans-serif';
+    ctx.font = '16.125px "NotoSansHans-Medium", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     const profEnText = getProfessionEnText(info.profession, info.profession_en);
@@ -508,6 +555,7 @@ export async function renderFrontCard(
   }
 
   await drawGradientStripe(ctx, false, layers);
+  await applyDiecutMask(ctx, false);
 }
 
 /**
@@ -579,6 +627,31 @@ export async function renderBackCard(
     }
   }
 
+  // 2.5. E1 Baseboard Silhouette on Back Card (精一底板背面剪影: 水平镜像 + 纯卡面基础颜色蒙版)
+  const isE2ForBack = info.elite_phase === 'E2';
+  if (!isE2ForBack && layers?.baseboard !== false) {
+    const baseboardImg = imageCache.get('./psd_assets/中间__精一底板.png') || await loadImage('./psd_assets/中间__精一底板.png');
+    if (isImageValid(baseboardImg)) {
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = CARD_WIDTH;
+      offCanvas.height = CARD_HEIGHT;
+      const offCtx = offCanvas.getContext('2d');
+      if (offCtx) {
+        offCtx.save();
+        offCtx.translate(CARD_WIDTH, 0);
+        offCtx.scale(-1, 1);
+        offCtx.drawImage(baseboardImg, 0, 685, 590, 495);
+        offCtx.restore();
+
+        offCtx.globalCompositeOperation = 'source-in';
+        offCtx.fillStyle = baseColor;
+        offCtx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+
+        ctx.drawImage(offCanvas, 0, 0);
+      }
+    }
+  }
+
   // 3. Back Decorative Overlays & Back Border Overlay
   if (layers?.borderOverlay !== false) {
     
@@ -600,7 +673,7 @@ export async function renderBackCard(
   if (layers?.professionFactionText !== false) {
     ctx.save();
     ctx.fillStyle = '#ffffff';
-    ctx.font = '500 16.25px "NotoSansHans-Medium", sans-serif';
+    ctx.font = '16px "NotoSansHans-Medium", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     const profEnText = getProfessionEnText(info.profession, info.profession_en);
@@ -620,7 +693,7 @@ export async function renderBackCard(
     ctx.save();
     ctx.translate(521, 1013);
     ctx.rotate(Math.PI / 2);
-    ctx.font = 'bold 16.67px "NotoSansHans-Bold", sans-serif';
+    ctx.font = 'bold 17px "NotoSansHans-Bold", sans-serif';
     ctx.fillStyle = barcodeColor;
     ctx.textBaseline = 'top';
     ctx.fillText(`ARKNIGHTS - ${info.id || 'MN04'}`, 0, 0);
@@ -628,6 +701,7 @@ export async function renderBackCard(
   }
 
   await drawGradientStripe(ctx, true, layers);
+  await applyDiecutMask(ctx, true);
 }
 
 /**
@@ -736,7 +810,7 @@ export async function renderWhiteCard(
 
     offCtx.save();
     offCtx.fillStyle = '#000000';
-    offCtx.font = '500 16.125px "NotoSansHans-Medium", sans-serif';
+    offCtx.font = '16.125px "NotoSansHans-Medium", sans-serif';
     offCtx.textAlign = 'left';
     offCtx.textBaseline = 'top';
     const profEnText = getProfessionEnText(info.profession);
@@ -765,6 +839,7 @@ export async function renderWhiteCard(
 
   // 3. Draw black stencil on transparent canvas
   ctx.drawImage(offCanvas, 0, 0);
+  await applyDiecutMask(ctx, true);
 }
 
 /**
@@ -785,5 +860,144 @@ async function drawGradientStripe(ctx: CanvasRenderingContext2D, isBack: boolean
   const img = imageCache.get(assetName) || await loadImage(assetName);
   if (isImageValid(img)) {
     ctx.drawImage(img, isBack ? 483 : 95, 684, 13, 496);
+  }
+}
+
+// --- BFS Flood Fill Masking for Diecut Precision ---
+let cachedMaskCanvas: HTMLCanvasElement | null = null;
+let maskPromise: Promise<HTMLCanvasElement | null> | null = null;
+
+export function getDiecutMask(): Promise<HTMLCanvasElement | null> {
+  if (cachedMaskCanvas) return Promise.resolve(cachedMaskCanvas);
+  if (maskPromise) return maskPromise;
+
+  maskPromise = (async () => {
+    try {
+      const diecutImg = imageCache.get('./psd_assets/刀线.png') || await loadImage('./psd_assets/刀线.png');
+      if (!isImageValid(diecutImg)) {
+        return null;
+      }
+
+      const w = CARD_WIDTH;
+      const h = CARD_HEIGHT;
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = w;
+      tempCanvas.height = h;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (!tempCtx) return null;
+
+      // Draw diecut line image
+      tempCtx.drawImage(diecutImg, 0, 0, w, h);
+      const imgData = tempCtx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+
+      const visited = new Uint8Array(w * h);
+      const queue = new Int32Array(w * h);
+      let head = 0;
+      let tail = 0;
+
+      // Enqueue all transparent border pixels (alpha < 50)
+      // Top and bottom rows
+      for (let x = 0; x < w; x++) {
+        // Top row
+        const idxTop = x;
+        if (data[idxTop * 4 + 3] < 50) {
+          visited[idxTop] = 1;
+          queue[tail++] = idxTop;
+        }
+        // Bottom row
+        const idxBot = (h - 1) * w + x;
+        if (data[idxBot * 4 + 3] < 50) {
+          visited[idxBot] = 1;
+          queue[tail++] = idxBot;
+        }
+      }
+
+      // Left and right columns (excluding corners already handled)
+      for (let y = 1; y < h - 1; y++) {
+        // Left column
+        const idxLeft = y * w;
+        if (data[idxLeft * 4 + 3] < 50) {
+          visited[idxLeft] = 1;
+          queue[tail++] = idxLeft;
+        }
+        // Right column
+        const idxRight = y * w + (w - 1);
+        if (data[idxRight * 4 + 3] < 50) {
+          visited[idxRight] = 1;
+          queue[tail++] = idxRight;
+        }
+      }
+
+      // BFS to find all connected transparent outside pixels
+      while (head < tail) {
+        const curr = queue[head++];
+        const cx = curr % w;
+        const cy = Math.floor(curr / w);
+
+        // 4 neighbors
+        const nxs = [cx - 1, cx + 1, cx, cx];
+        const nys = [cy, cy, cy - 1, cy + 1];
+
+        for (let i = 0; i < 4; i++) {
+          const nx = nxs[i];
+          const ny = nys[i];
+
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            const nidx = ny * w + nx;
+            if (!visited[nidx]) {
+              const alpha = data[nidx * 4 + 3];
+              if (alpha < 50) {
+                visited[nidx] = 1;
+                queue[tail++] = nidx;
+              }
+            }
+          }
+        }
+      }
+
+      // Fill a new image data where OUTSIDE is transparent, INSIDE is opaque white
+      const maskImgData = tempCtx.createImageData(w, h);
+      const mData = maskImgData.data;
+      for (let i = 0; i < w * h; i++) {
+        if (visited[i] === 1) {
+          // Outside - transparent
+          mData[i * 4] = 0;
+          mData[i * 4 + 1] = 0;
+          mData[i * 4 + 2] = 0;
+          mData[i * 4 + 3] = 0;
+        } else {
+          // Inside or border line - opaque white
+          mData[i * 4] = 255;
+          mData[i * 4 + 1] = 255;
+          mData[i * 4 + 2] = 255;
+          mData[i * 4 + 3] = 255;
+        }
+      }
+
+      tempCtx.putImageData(maskImgData, 0, 0);
+      cachedMaskCanvas = tempCanvas;
+      return cachedMaskCanvas;
+    } catch (e) {
+      console.error('Failed to create diecut mask:', e);
+      return null;
+    }
+  })();
+
+  return maskPromise;
+}
+
+export async function applyDiecutMask(ctx: CanvasRenderingContext2D, mirror: boolean = false) {
+  const mask = await getDiecutMask();
+  if (mask) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-in';
+    if (mirror) {
+      ctx.translate(CARD_WIDTH, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(mask, 0, 0);
+    ctx.restore();
   }
 }

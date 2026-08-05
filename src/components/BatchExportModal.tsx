@@ -84,7 +84,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
       // 2. 背面.png
       if (exportKinds.back) {
         ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-        await renderBackCard(ctx, currentInfo, cutoutObj, e1Opts);
+        await renderBackCard(ctx, currentInfo, cutoutObj, e1Opts, img1Obj);
         const dataUrl = canvas.toDataURL('image/png');
         folder.file('背面.png', dataUrl.split(',')[1], { base64: true });
       }

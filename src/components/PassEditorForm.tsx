@@ -321,7 +321,7 @@ export const PassEditorForm: React.FC<PassEditorFormProps> = ({
                   src={
                     customIconUrl ||
                     PRESET_FACTIONS.find((f) => f.zh === info.faction || (info.faction && f.zh.includes(info.faction)))?.icon ||
-                    getFactionIconDataUrl('中间__阵营图标__罗德岛.png')
+                    PSD_ASSETS['中间__阵营图标__罗德岛.png']
                   }
                   alt="Faction Icon Preview"
                   className="max-w-full max-h-full object-contain invert"
