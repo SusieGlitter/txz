@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* Keep a single source of truth for fonts in src/assets/fonts */
 @font-face {
   font-family: 'BebasNeue';
   src: url('./assets/fonts/BebasNeue-Regular.otf') format('opentype');

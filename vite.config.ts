@@ -3,11 +3,9 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
-export default defineConfig(({ mode }) => {
-  const isProduction = mode === 'production';
-
+export default defineConfig(() => {
   return {
-    base: isProduction ? '/txz/' : './',
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

@@ -258,7 +258,7 @@ export default function App() {
           </div>
 
           {/* Right Column: Live High-Res Canvas Preview (5 cols) */}
-          <div className="lg:col-span-5 lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)]">
+          <div className="lg:col-span-5 lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] overflow-y-auto pb-8">
             <PassPreviewCanvas
               info={info}
               e1Opts={e1Opts}
@@ -304,7 +304,6 @@ export default function App() {
       <BatchExportModal
         isOpen={isBatchExportModalOpen}
         onClose={() => setIsBatchExportModalOpen(false)}
-        characters={characters}
         currentInfo={info}
         e1Opts={e1Opts}
         frontPhotoUrl={frontPhotoUrl}

@@ -27,9 +27,14 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
       return;
     }
 
-    const normalizedSrc = src.replace(/\\/g, '/');
-    const filename = normalizedSrc.split('/').pop() || normalizedSrc;
-    const actualSrc = PSD_ASSETS[filename] || normalizedSrc;
+    let actualSrc = src;
+    if (src.includes('psd_assets/')) {
+      const parts = src.split('/');
+      const filename = parts[parts.length - 1];
+      if (PSD_ASSETS[filename]) {
+        actualSrc = PSD_ASSETS[filename];
+      }
+    }
 
     if (imageCache.has(actualSrc)) {
       const cached = imageCache.get(actualSrc);
@@ -40,26 +45,24 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
       }
       return;
     }
-
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       if (img.naturalWidth > 0 && img.naturalHeight > 0) {
         imageCache.set(actualSrc, img);
-        if (normalizedSrc !== actualSrc) imageCache.set(normalizedSrc, img);
+        if (src !== actualSrc) imageCache.set(src, img);
         resolve(img);
       } else {
         imageCache.set(actualSrc, null);
-        if (normalizedSrc !== actualSrc) imageCache.set(normalizedSrc, null);
+        if (src !== actualSrc) imageCache.set(src, null);
         resolve(null);
       }
     };
     img.onerror = () => {
-      imageCache.set(actualSrc, null);
-      if (normalizedSrc !== actualSrc) imageCache.set(normalizedSrc, null);
+      imageCache.set(src, null);
       resolve(null);
     };
-    img.src = actualSrc;
+    img.src = src;
   });
 }
 
@@ -423,22 +426,7 @@ export async function renderFrontCard(
 
   // 5. Decorative Overlays & Border Overlay
   if (layers?.borderOverlay !== false) {
-    const gradStripeImg = imageCache.get('./psd_assets/正面__装饰图案__渐变条纹.png') || await loadImage('./psd_assets/正面__装饰图案__渐变条纹.png');
-    if (isImageValid(gradStripeImg)) {
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = 13;
-      offCanvas.height = 496;
-      const offCtx = offCanvas.getContext('2d');
-      if (offCtx) {
-        offCtx.drawImage(gradStripeImg, 0, 0, 13, 496);
-        offCtx.globalCompositeOperation = 'source-in';
-        offCtx.fillStyle = baseColor;
-        offCtx.fillRect(0, 0, 13, 496);
-        ctx.drawImage(offCanvas, 95, 684);
-      } else {
-        ctx.drawImage(gradStripeImg, 95, 684, 13, 496);
-      }
-    }
+    
 
     const arknightsLogoImg = imageCache.get('./psd_assets/正面__装饰图案__明日方舟.png') || await loadImage('./psd_assets/正面__装饰图案__明日方舟.png');
     if (isImageValid(arknightsLogoImg)) {
@@ -458,7 +446,8 @@ export async function renderFrontCard(
   if (layers?.barcode !== false) {
     const barcodeStr = info.barcode_text || info.english_name || info.id || 'ARKNIGHTS - R001';
     // In E1 mode, barcode line color uses baseColor (or white for maximum contrast if baseColor is dark)
-    const barcodeColor = !isE2 ? (baseColor || '#ffffff') : '#ffffff';
+    // In E2 mode, barcode line color should be black
+    const barcodeColor = !isE2 ? (baseColor || '#ffffff') : '#000000';
     drawVerticalBarcode(ctx, barcodeStr, 0, 850, 55, 310, barcodeColor);
 
     ctx.save();
@@ -517,6 +506,8 @@ export async function renderFrontCard(
     ctx.fillText(`${profEnText} / ${factionEnText}`, 117, 1131);
     ctx.restore();
   }
+
+  await drawGradientStripe(ctx, false, layers);
 }
 
 /**
@@ -590,22 +581,7 @@ export async function renderBackCard(
 
   // 3. Back Decorative Overlays & Back Border Overlay
   if (layers?.borderOverlay !== false) {
-    const backStripeImg = imageCache.get('./psd_assets/背面__装饰__渐变条纹.png') || await loadImage('./psd_assets/背面__装饰__渐变条纹.png');
-    if (isImageValid(backStripeImg)) {
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = 13;
-      offCanvas.height = 496;
-      const offCtx = offCanvas.getContext('2d');
-      if (offCtx) {
-        offCtx.drawImage(backStripeImg, 0, 0, 13, 496);
-        offCtx.globalCompositeOperation = 'source-in';
-        offCtx.fillStyle = baseColor;
-        offCtx.fillRect(0, 0, 13, 496);
-        ctx.drawImage(offCanvas, 483, 684);
-      } else {
-        ctx.drawImage(backStripeImg, 483, 684, 13, 496);
-      }
-    }
+    
 
     const trademarkImg = imageCache.get('./psd_assets/背面__文字__商标.png') || await loadImage('./psd_assets/背面__文字__商标.png');
     if (isImageValid(trademarkImg)) {
@@ -637,7 +613,7 @@ export async function renderBackCard(
   // Rendered ON TOP of border overlay
   if (layers?.barcode !== false) {
     const isE2 = info.elite_phase === 'E2';
-    const barcodeColor = (!isE2 && info.base_color) ? info.base_color : '#ffffff';
+    const barcodeColor = !isE2 ? (info.base_color || '#ffffff') : '#000000';
     const barcodeStr = info.barcode_text || info.english_name || info.id || 'ARKNIGHTS - R001';
     drawVerticalBarcode(ctx, barcodeStr, 535, 849, 55, 310, barcodeColor);
 
@@ -650,6 +626,8 @@ export async function renderBackCard(
     ctx.fillText(`ARKNIGHTS - ${info.id || 'MN04'}`, 0, 0);
     ctx.restore();
   }
+
+  await drawGradientStripe(ctx, true, layers);
 }
 
 /**
@@ -767,6 +745,8 @@ export async function renderWhiteCard(
     offCtx.restore();
   }
 
+    await drawGradientStripe(offCtx, false, layers);
+
   // 2. Convert all non-transparent graphic pixels (alpha > 10) into solid BLACK (#000000, Alpha = 255)
   // All other pixels remain fully TRANSPARENT (Alpha = 0)
   const imgData = offCtx.getImageData(0, 0, CARD_WIDTH, CARD_HEIGHT);
@@ -796,5 +776,14 @@ export async function renderDiecutCard(ctx: CanvasRenderingContext2D) {
   const diecutImg = imageCache.get('./psd_assets/刀线.png') || await loadImage('./psd_assets/刀线.png');
   if (isImageValid(diecutImg)) {
     ctx.drawImage(diecutImg, 0, 0, 590, 1180);
+  }
+}
+
+async function drawGradientStripe(ctx: CanvasRenderingContext2D, isBack: boolean, layers?: LayerVisibilityConfig) {
+  if (layers?.borderOverlay === false) return;
+  const assetName = isBack ? './psd_assets/背面__装饰__渐变条纹.png' : './psd_assets/正面__装饰图案__渐变条纹.png';
+  const img = imageCache.get(assetName) || await loadImage(assetName);
+  if (isImageValid(img)) {
+    ctx.drawImage(img, isBack ? 483 : 95, 684, 13, 496);
   }
 }

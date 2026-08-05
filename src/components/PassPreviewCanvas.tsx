@@ -131,7 +131,7 @@ export const PassPreviewCanvas: React.FC<PassPreviewCanvasProps> = ({
   ];
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+    <div className="flex flex-col h-auto min-h-full bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
       {/* Header View Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-2">
