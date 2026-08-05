@@ -398,7 +398,8 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       color: new THREE.Color('#ffffff'),
       roughness: 0.02,
       metalness: 0.0,
-      transparent: true,
+      transparent: false,
+      alphaTest: 0.5,
       opacity: 1.0,
       transmission: 0.98,
       ior: 1.49,
@@ -414,7 +415,8 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       color: new THREE.Color('#ffffff'),
       roughness: 0.9, // Higher roughness for a very frosted / matte laser-cut look!
       metalness: 0.0,
-      transparent: true,
+      transparent: false,
+      alphaTest: 0.5,
       opacity: 1.0,
       transmission: 0.1, // Lower transmission because it's frosted/scattered
       ior: 1.49,
