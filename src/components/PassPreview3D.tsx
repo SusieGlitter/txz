@@ -362,26 +362,17 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     const w = 5.0;
     const h = 10.0;
     const d = thickness;
-    const radius = 0.4; // rounded corner radius
 
-    // Create 2D Rounded Rectangle Shape
-    const createRoundedRect = (width: number, height: number, rad: number) => {
-      const s = new THREE.Shape();
-      const x = -width / 2;
-      const y = -height / 2;
-      s.moveTo(x + rad, y);
-      s.lineTo(x + width - rad, y);
-      s.quadraticCurveTo(x + width, y, x + width, y + rad);
-      s.lineTo(x + width, y + height - rad);
-      s.quadraticCurveTo(x + width, y + height, x + width - rad, y + height);
-      s.lineTo(x + rad, y + height);
-      s.quadraticCurveTo(x, y + height, x, y + height - rad);
-      s.lineTo(x, y + rad);
-      s.quadraticCurveTo(x, y, x + rad, y);
-      return s;
-    };
-
-    const shape = createRoundedRect(w, h, radius);
+    // Use a sharp rectangular top face. The real acrylic plate should follow the diecut contour directly,
+    // without any rounded-corner smoothing or beveling.
+    const shape = new THREE.Shape();
+    const x = -w / 2;
+    const y = -h / 2;
+    shape.moveTo(x, y);
+    shape.lineTo(x + w, y);
+    shape.lineTo(x + w, y + h);
+    shape.lineTo(x, y + h);
+    shape.closePath();
 
     // 1. Acrylic Base Mesh
     // The acrylic plate should be treated as a straight swept solid generated from the boundary contour:
