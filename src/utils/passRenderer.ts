@@ -220,42 +220,42 @@ export function getFactionIconPos(factionName: string): { x: number; y: number; 
 }
 
 function getFactionIconUrl(factionName: string): string | null {
-  if (!factionName) return './psd_assets/中间__阵营图标__罗德岛.png';
+  if (!factionName) return PSD_ASSETS['中间__阵营图标__罗德岛.png'] ?? null;
   const name = factionName.trim();
   const map: Record<string, string> = {
-    '罗德岛': './psd_assets/中间__阵营图标__罗德岛.png',
-    '卡西米尔': './psd_assets/中间__阵营图标__卡西米尔.png',
-    '岁': './psd_assets/中间__阵营图标__岁.png',
-    '炎': './psd_assets/中间__阵营图标__炎.png',
-    '莱茵生命': './psd_assets/中间__阵营图标__莱茵生命.png',
-    '使徒': './psd_assets/中间__阵营图标__使徒.png',
-    '深海猎人': './psd_assets/中间__阵营图标__深海猎人.png',
-    '萨米': './psd_assets/中间__阵营图标__萨米.png',
-    '汐斯塔': './psd_assets/中间__阵营图标__汐斯塔.png',
-    '拉特兰': './psd_assets/中间__阵营图标__拉特兰.png',
-    '莱塔尼亚': './psd_assets/中间__阵营图标__莱塔尼亚.png',
-    '萨尔贡': './psd_assets/中间__阵营图标__萨尔贡.png',
-    '企鹅物流': './psd_assets/中间__阵营图标__企鹅物流.png',
-    '黑钢国际': './psd_assets/中间__阵营图标__黑钢国际.png',
-    '鲤氏': './psd_assets/中间__阵营图标__鲤氏.png',
-    '鲤氏侦探事务所': './psd_assets/中间__阵营图标__鲤氏.png',
-    '东国': './psd_assets/中间__阵营图标__东国.png',
-    'sweep': './psd_assets/中间__阵营图标__sweep.png',
-    'SWEEP': './psd_assets/中间__阵营图标__sweep.png',
-    '叙拉古': './psd_assets/中间__阵营图标__叙拉古.png',
-    '雷姆必拓': './psd_assets/中间__阵营图标__雷姆必拓.png',
-    '维多利亚': './psd_assets/中间__阵营图标__维多利亚.png',
-    '哥伦比亚': './psd_assets/中间__阵营图标__哥伦比亚.png',
-    '喀兰贸易': './psd_assets/中间__阵营图标__喀兰贸易.png',
-    '乌萨斯': './psd_assets/中间__阵营图标__乌萨斯.png',
-    '龙门近卫局': './psd_assets/中间__阵营图标__龙门近卫局.png',
-    '龙门': './psd_assets/中间__阵营图标__龙门近卫局.png',
+    '罗德岛': '中间__阵营图标__罗德岛.png',
+    '卡西米尔': '中间__阵营图标__卡西米尔.png',
+    '岁': '中间__阵营图标__岁.png',
+    '炎': '中间__阵营图标__炎.png',
+    '莱茵生命': '中间__阵营图标__莱茵生命.png',
+    '使徒': '中间__阵营图标__使徒.png',
+    '深海猎人': '中间__阵营图标__深海猎人.png',
+    '萨米': '中间__阵营图标__萨米.png',
+    '汐斯塔': '中间__阵营图标__汐斯塔.png',
+    '拉特兰': '中间__阵营图标__拉特兰.png',
+    '莱塔尼亚': '中间__阵营图标__莱塔尼亚.png',
+    '萨尔贡': '中间__阵营图标__萨尔贡.png',
+    '企鹅物流': '中间__阵营图标__企鹅物流.png',
+    '黑钢国际': '中间__阵营图标__黑钢国际.png',
+    '鲤氏': '中间__阵营图标__鲤氏.png',
+    '鲤氏侦探事务所': '中间__阵营图标__鲤氏.png',
+    '东国': '中间__阵营图标__东国.png',
+    'sweep': '中间__阵营图标__sweep.png',
+    'SWEEP': '中间__阵营图标__sweep.png',
+    '叙拉古': '中间__阵营图标__叙拉古.png',
+    '雷姆必拓': '中间__阵营图标__雷姆必拓.png',
+    '维多利亚': '中间__阵营图标__维多利亚.png',
+    '哥伦比亚': '中间__阵营图标__哥伦比亚.png',
+    '喀兰贸易': '中间__阵营图标__喀兰贸易.png',
+    '乌萨斯': '中间__阵营图标__乌萨斯.png',
+    '龙门近卫局': '中间__阵营图标__龙门近卫局.png',
+    '龙门': '中间__阵营图标__龙门近卫局.png',
   };
 
   for (const k in map) {
-    if (name.includes(k)) return map[k];
+    if (name.includes(k)) return PSD_ASSETS[map[k]] ?? PSD_ASSETS['中间__阵营图标__罗德岛.png'] ?? null;
   }
-  return './psd_assets/中间__阵营图标__罗德岛.png';
+  return PSD_ASSETS['中间__阵营图标__罗德岛.png'] ?? null;
 }
 
 /**

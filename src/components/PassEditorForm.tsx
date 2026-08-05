@@ -13,33 +13,37 @@ import {
 } from 'lucide-react';
 import { E1Options, FactionConfig, PassCardInfo, ProfessionKey } from '../types';
 import { DEFAULT_FACTIONS, PROFESSION_EN_MAP, getFactionEnText } from '../data/defaultCharacters';
+import { PSD_ASSETS } from '../data/imageAssets';
+
+const getFactionIconDataUrl = (filename: string) =>
+  PSD_ASSETS[filename] ?? PSD_ASSETS['中间__阵营图标__罗德岛.png'] ?? '';
 
 export const PRESET_FACTIONS = [
-  { zh: '罗德岛', en: 'RHODES ISLAND', icon: './psd_assets/中间__阵营图标__罗德岛.png' },
-  { zh: '莱茵生命', en: 'RHINE LAB', icon: './psd_assets/中间__阵营图标__莱茵生命.png' },
-  { zh: '企鹅物流', en: 'PENGUIN LOGISTICS', icon: './psd_assets/中间__阵营图标__企鹅物流.png' },
-  { zh: '龙门', en: 'LUNGMEN', icon: './psd_assets/中间__阵营图标__龙门近卫局.png' },
-  { zh: '卡西米尔', en: 'KAZIMIERZ', icon: './psd_assets/中间__阵营图标__卡西米尔.png' },
-  { zh: '维多利亚', en: 'VICTORIA', icon: './psd_assets/中间__阵营图标__维多利亚.png' },
-  { zh: '乌萨斯', en: 'URSUS', icon: './psd_assets/中间__阵营图标__乌萨斯.png' },
-  { zh: '拉特兰', en: 'LATERANO', icon: './psd_assets/中间__阵营图标__拉特兰.png' },
-  { zh: '黑钢国际', en: 'BLACKSTEEL', icon: './psd_assets/中间__阵营图标__黑钢国际.png' },
-  { zh: '巴别塔', en: 'BABEL', icon: './psd_assets/中间__阵营图标__罗德岛.png' },
-  { zh: '叙拉古', en: 'SIRACUSA', icon: './psd_assets/中间__阵营图标__叙拉古.png' },
-  { zh: '哥伦比亚', en: 'COLUMBIA', icon: './psd_assets/中间__阵营图标__哥伦比亚.png' },
-  { zh: '喀兰贸易', en: 'KARLAN COMMERCIAL', icon: './psd_assets/中间__阵营图标__喀兰贸易.png' },
-  { zh: '炎', en: 'YAN', icon: './psd_assets/中间__阵营图标__炎.png' },
-  { zh: '岁', en: 'SUI', icon: './psd_assets/中间__阵营图标__岁.png' },
-  { zh: '使徒', en: 'APOSTLES', icon: './psd_assets/中间__阵营图标__使徒.png' },
-  { zh: '深海猎人', en: 'ABYSSAL HUNTERS', icon: './psd_assets/中间__阵营图标__深海猎人.png' },
-  { zh: '萨米', en: 'SAMI', icon: './psd_assets/中间__阵营图标__萨米.png' },
-  { zh: '汐斯塔', en: 'SIESTA', icon: './psd_assets/中间__阵营图标__汐斯塔.png' },
-  { zh: '莱塔尼亚', en: 'LEITHANIEN', icon: './psd_assets/中间__阵营图标__莱塔尼亚.png' },
-  { zh: '萨尔贡', en: 'SARGON', icon: './psd_assets/中间__阵营图标__萨尔贡.png' },
-  { zh: '雷姆必拓', en: 'RIM BILLITON', icon: './psd_assets/中间__阵营图标__雷姆必拓.png' },
-  { zh: '鲤氏', en: "LEE'S DETECTIVE AGENCY", icon: './psd_assets/中间__阵营图标__鲤氏.png' },
-  { zh: '东国', en: 'HIGASHI', icon: './psd_assets/中间__阵营图标__东国.png' },
-  { zh: 'SWEEP', en: 'SWEEP', icon: './psd_assets/中间__阵营图标__sweep.png' },
+  { zh: '罗德岛', en: 'RHODES ISLAND', icon: getFactionIconDataUrl('中间__阵营图标__罗德岛.png') },
+  { zh: '莱茵生命', en: 'RHINE LAB', icon: getFactionIconDataUrl('中间__阵营图标__莱茵生命.png') },
+  { zh: '企鹅物流', en: 'PENGUIN LOGISTICS', icon: getFactionIconDataUrl('中间__阵营图标__企鹅物流.png') },
+  { zh: '龙门', en: 'LUNGMEN', icon: getFactionIconDataUrl('中间__阵营图标__龙门近卫局.png') },
+  { zh: '卡西米尔', en: 'KAZIMIERZ', icon: getFactionIconDataUrl('中间__阵营图标__卡西米尔.png') },
+  { zh: '维多利亚', en: 'VICTORIA', icon: getFactionIconDataUrl('中间__阵营图标__维多利亚.png') },
+  { zh: '乌萨斯', en: 'URSUS', icon: getFactionIconDataUrl('中间__阵营图标__乌萨斯.png') },
+  { zh: '拉特兰', en: 'LATERANO', icon: getFactionIconDataUrl('中间__阵营图标__拉特兰.png') },
+  { zh: '黑钢国际', en: 'BLACKSTEEL', icon: getFactionIconDataUrl('中间__阵营图标__黑钢国际.png') },
+  { zh: '巴别塔', en: 'BABEL', icon: getFactionIconDataUrl('中间__阵营图标__罗德岛.png') },
+  { zh: '叙拉古', en: 'SIRACUSA', icon: getFactionIconDataUrl('中间__阵营图标__叙拉古.png') },
+  { zh: '哥伦比亚', en: 'COLUMBIA', icon: getFactionIconDataUrl('中间__阵营图标__哥伦比亚.png') },
+  { zh: '喀兰贸易', en: 'KARLAN COMMERCIAL', icon: getFactionIconDataUrl('中间__阵营图标__喀兰贸易.png') },
+  { zh: '炎', en: 'YAN', icon: getFactionIconDataUrl('中间__阵营图标__炎.png') },
+  { zh: '岁', en: 'SUI', icon: getFactionIconDataUrl('中间__阵营图标__岁.png') },
+  { zh: '使徒', en: 'APOSTLES', icon: getFactionIconDataUrl('中间__阵营图标__使徒.png') },
+  { zh: '深海猎人', en: 'ABYSSAL HUNTERS', icon: getFactionIconDataUrl('中间__阵营图标__深海猎人.png') },
+  { zh: '萨米', en: 'SAMI', icon: getFactionIconDataUrl('中间__阵营图标__萨米.png') },
+  { zh: '汐斯塔', en: 'SIESTA', icon: getFactionIconDataUrl('中间__阵营图标__汐斯塔.png') },
+  { zh: '莱塔尼亚', en: 'LEITHANIEN', icon: getFactionIconDataUrl('中间__阵营图标__莱塔尼亚.png') },
+  { zh: '萨尔贡', en: 'SARGON', icon: getFactionIconDataUrl('中间__阵营图标__萨尔贡.png') },
+  { zh: '雷姆必拓', en: 'RIM BILLITON', icon: getFactionIconDataUrl('中间__阵营图标__雷姆必拓.png') },
+  { zh: '鲤氏', en: "LEE'S DETECTIVE AGENCY", icon: getFactionIconDataUrl('中间__阵营图标__鲤氏.png') },
+  { zh: '东国', en: 'HIGASHI', icon: getFactionIconDataUrl('中间__阵营图标__东国.png') },
+  { zh: 'SWEEP', en: 'SWEEP', icon: getFactionIconDataUrl('中间__阵营图标__sweep.png') },
 ];
 
 interface PassEditorFormProps {
@@ -317,7 +321,7 @@ export const PassEditorForm: React.FC<PassEditorFormProps> = ({
                   src={
                     customIconUrl ||
                     PRESET_FACTIONS.find((f) => f.zh === info.faction || (info.faction && f.zh.includes(info.faction)))?.icon ||
-                    './psd_assets/中间__阵营图标__罗德岛.png'
+                    getFactionIconDataUrl('中间__阵营图标__罗德岛.png')
                   }
                   alt="Faction Icon Preview"
                   className="max-w-full max-h-full object-contain invert"
