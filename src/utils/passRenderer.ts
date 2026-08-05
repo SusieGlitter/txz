@@ -930,8 +930,92 @@ export function getDiecutMask(): Promise<HTMLCanvasElement | null> {
         }
       }
 
-      // Pass 1: find the outer transparent background connected to the image border.
-      // This region is outside the acrylic plate and should remain transparent.
+      // Start from the geometric center of the canvas. In this diecut style, the center is guaranteed
+      // to fall inside the important transparent interior region (region 2). From there, BFS finds the
+      // whole transparent region 2 and its boundary. That boundary includes the white curves 1 and 2.
+      // The final mask keeps exactly this region 2 + boundary, while the enclosed area inside white curve 2
+      // is treated as the real hole to be excavated.
+      const cx = Math.floor(w / 2);
+      const cy = Math.floor(h / 2);
+      const centerIdx = cy * w + cx;
+
+      if (data[centerIdx * 4 + 3] < 50) {
+        const keepSet = new Uint8Array(w * h);
+        const regionQueue = new Int32Array(w * h);
+        let regionHead = 0;
+        let regionTail = 0;
+
+        regionQueue[regionTail++] = centerIdx;
+        keepSet[centerIdx] = 1;
+
+        while (regionHead < regionTail) {
+          const curr = regionQueue[regionHead++];
+          const x = curr % w;
+          const y = Math.floor(curr / w);
+
+          const nxs = [x - 1, x + 1, x, x];
+          const nys = [y, y, y - 1, y + 1];
+          for (let i = 0; i < 4; i++) {
+            const nx = nxs[i];
+            const ny = nys[i];
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+              const nidx = ny * w + nx;
+              if (!keepSet[nidx]) {
+                const nAlpha = data[nidx * 4 + 3];
+                if (nAlpha < 50) {
+                  keepSet[nidx] = 1;
+                  regionQueue[regionTail++] = nidx;
+                }
+              }
+            }
+          }
+        }
+
+        // Add the boundary pixels around the found transparent region. This boundary contains both white
+        // curve 1 and white curve 2, which are the parts we want to keep.
+        for (let i = 0; i < w * h; i++) {
+          if (!keepSet[i]) continue;
+
+          const x = i % w;
+          const y = Math.floor(i / w);
+          const nxs = [x - 1, x + 1, x, x];
+          const nys = [y, y, y - 1, y + 1];
+
+          for (let j = 0; j < 4; j++) {
+            const nx = nxs[j];
+            const ny = nys[j];
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+              const nidx = ny * w + nx;
+              if (data[nidx * 4 + 3] >= 50) {
+                keepSet[nidx] = 1;
+              }
+            }
+          }
+        }
+
+        const maskImgData = tempCtx.createImageData(w, h);
+        const mData = maskImgData.data;
+        for (let i = 0; i < w * h; i++) {
+          const shouldKeep = keepSet[i] === 1;
+          if (shouldKeep) {
+            mData[i * 4] = 255;
+            mData[i * 4 + 1] = 255;
+            mData[i * 4 + 2] = 255;
+            mData[i * 4 + 3] = 255;
+          } else {
+            mData[i * 4] = 0;
+            mData[i * 4 + 1] = 0;
+            mData[i * 4 + 2] = 0;
+            mData[i * 4 + 3] = 0;
+          }
+        }
+
+        tempCtx.putImageData(maskImgData, 0, 0);
+        cachedMaskCanvas = tempCanvas;
+        return cachedMaskCanvas;
+      }
+
+      // Fallback: if the center is not inside a transparent hole, preserve the original large-body logic.
       while (head < tail) {
         const curr = queue[head++];
         const cx = curr % w;
@@ -957,82 +1041,19 @@ export function getDiecutMask(): Promise<HTMLCanvasElement | null> {
         }
       }
 
-      // Pass 2: find all enclosed transparent regions that are NOT connected to the outer background.
-      // These are true holes, such as inner circular cutouts. They must remain transparent.
-      const holeVisited = new Uint8Array(w * h);
-      const holeQueue = new Int32Array(w * h);
-      let holeHead = 0;
-      let holeTail = 0;
-
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = y * w + x;
-          if (visited[idx] || holeVisited[idx]) continue;
-          const alpha = data[idx * 4 + 3];
-          if (alpha >= 50) continue;
-
-          const regionQueue = new Int32Array(w * h);
-          let regionHead = 0;
-          let regionTail = 0;
-          let touchesBorder = false;
-
-          regionQueue[regionTail++] = idx;
-          holeVisited[idx] = 1;
-
-          while (regionHead < regionTail) {
-            const curr = regionQueue[regionHead++];
-            const cx = curr % w;
-            const cy = Math.floor(curr / w);
-            if (cx === 0 || cx === w - 1 || cy === 0 || cy === h - 1) touchesBorder = true;
-
-            const nxs = [cx - 1, cx + 1, cx, cx];
-            const nys = [cy, cy, cy - 1, cy + 1];
-
-            for (let i = 0; i < 4; i++) {
-              const nx = nxs[i];
-              const ny = nys[i];
-              if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                const nidx = ny * w + nx;
-                if (!holeVisited[nidx]) {
-                  const nAlpha = data[nidx * 4 + 3];
-                  if (nAlpha < 50) {
-                    holeVisited[nidx] = 1;
-                    regionQueue[regionTail++] = nidx;
-                  }
-                }
-              }
-            }
-          }
-
-          if (!touchesBorder) {
-            for (let i = 0; i < regionTail; i++) {
-              holeQueue[holeTail++] = regionQueue[i];
-            }
-          }
-        }
-      }
-
-      // Final mask: keep all solid pixels except those inside enclosed transparent holes.
       const maskImgData = tempCtx.createImageData(w, h);
       const mData = maskImgData.data;
-      const holeSet = new Uint8Array(w * h);
-      for (let i = 0; i < holeTail; i++) {
-        holeSet[holeQueue[i]] = 1;
-      }
-
       for (let i = 0; i < w * h; i++) {
-        const alpha = data[i * 4 + 3];
-        const isHole = holeSet[i] === 1;
-        if (alpha > 50 && !isHole) {
-          mData[i * 4] = 255;
-          mData[i * 4 + 1] = 255;
-          mData[i * 4 + 2] = 255;
-          mData[i * 4 + 3] = 255;
-        } else {
+        if (visited[i] === 1) {
           mData[i * 4] = 0;
           mData[i * 4 + 1] = 0;
           mData[i * 4 + 2] = 0;
           mData[i * 4 + 3] = 0;
+        } else {
+          mData[i * 4] = 255;
+          mData[i * 4 + 1] = 255;
+          mData[i * 4 + 2] = 255;
+          mData[i * 4 + 3] = 255;
         }
       }
 
