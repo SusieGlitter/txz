@@ -27,14 +27,9 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
       return;
     }
 
-    let actualSrc = src;
-    if (src.includes('psd_assets/')) {
-      const parts = src.split('/');
-      const filename = parts[parts.length - 1];
-      if (PSD_ASSETS[filename]) {
-        actualSrc = PSD_ASSETS[filename];
-      }
-    }
+    const normalizedSrc = src.replace(/\\/g, '/');
+    const filename = normalizedSrc.split('/').pop() || normalizedSrc;
+    const actualSrc = PSD_ASSETS[filename] || normalizedSrc;
 
     if (imageCache.has(actualSrc)) {
       const cached = imageCache.get(actualSrc);
@@ -45,24 +40,26 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
       }
       return;
     }
+
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       if (img.naturalWidth > 0 && img.naturalHeight > 0) {
         imageCache.set(actualSrc, img);
-        if (src !== actualSrc) imageCache.set(src, img);
+        if (normalizedSrc !== actualSrc) imageCache.set(normalizedSrc, img);
         resolve(img);
       } else {
         imageCache.set(actualSrc, null);
-        if (src !== actualSrc) imageCache.set(src, null);
+        if (normalizedSrc !== actualSrc) imageCache.set(normalizedSrc, null);
         resolve(null);
       }
     };
     img.onerror = () => {
-      imageCache.set(src, null);
+      imageCache.set(actualSrc, null);
+      if (normalizedSrc !== actualSrc) imageCache.set(normalizedSrc, null);
       resolve(null);
     };
-    img.src = src;
+    img.src = actualSrc;
   });
 }
 
