@@ -1,0 +1,620 @@
+{
+  "width": 590,
+  "height": 1180,
+  "children": [
+    {
+      "name": "图层 1",
+      "top": 0,
+      "left": 0,
+      "bottom": 1180,
+      "right": 590,
+      "hidden": true
+    },
+    {
+      "name": "图层 2",
+      "top": 0,
+      "left": 0,
+      "bottom": 1180,
+      "right": 590,
+      "hidden": true
+    },
+    {
+      "name": "背面",
+      "top": 0,
+      "left": 0,
+      "bottom": 0,
+      "right": 0,
+      "hidden": true,
+      "children": [
+        {
+          "name": "装饰",
+          "top": 0,
+          "left": 0,
+          "bottom": 0,
+          "right": 0,
+          "hidden": false,
+          "children": [
+            {
+              "name": "饰边",
+              "top": 0,
+              "left": 0,
+              "bottom": 1180,
+              "right": 590,
+              "hidden": false
+            },
+            {
+              "name": "条码",
+              "top": 0,
+              "left": 0,
+              "bottom": 1180,
+              "right": 590,
+              "hidden": true
+            },
+            {
+              "name": "渐变条纹",
+              "top": 684,
+              "left": 483,
+              "bottom": 1180,
+              "right": 496,
+              "hidden": false
+            }
+          ]
+        },
+        {
+          "name": "文字",
+          "top": 0,
+          "left": 0,
+          "bottom": 0,
+          "right": 0,
+          "hidden": false,
+          "children": [
+            {
+              "name": "ARKNIGHTS - MN04",
+              "top": 1013,
+              "left": 508,
+              "bottom": 1164,
+              "right": 521,
+              "hidden": false,
+              "text": "ARKNIGHTS - R001",
+              "font": {
+                "name": "NotoSansHans-Bold",
+                "script": 3,
+                "type": 2,
+                "synthetic": 0
+              },
+              "fontSize": 16.66667,
+              "fillColor": {
+                "r": 0,
+                "g": 0,
+                "b": 0
+              }
+            },
+            {
+              "name": "GUARD/RHODES ISLAND",
+              "top": 691,
+              "left": 122,
+              "bottom": 707,
+              "right": 309,
+              "hidden": false,
+              "text": "GUARD/RHODES ISLAND",
+              "font": {
+                "name": "NotoSansHans-Medium",
+                "script": 3,
+                "type": 2,
+                "synthetic": 0
+              },
+              "fontSize": 16.25,
+              "fillColor": {
+                "r": 255,
+                "g": 255,
+                "b": 255
+              }
+            },
+            {
+              "name": "商标",
+              "top": 669,
+              "left": 121,
+              "bottom": 723,
+              "right": 438,
+              "hidden": false
+            }
+          ]
+        },
+        {
+          "name": "generated_barcode",
+          "top": 849,
+          "left": 535,
+          "bottom": 1159,
+          "right": 590,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "中间",
+      "top": 0,
+      "left": 0,
+      "bottom": 0,
+      "right": 0,
+      "hidden": true,
+      "children": [
+        {
+          "name": "人物层",
+          "top": 0,
+          "left": 0,
+          "bottom": 0,
+          "right": 0,
+          "hidden": false,
+          "children": []
+        },
+        {
+          "name": "精一底板",
+          "top": 685,
+          "left": 0,
+          "bottom": 1180,
+          "right": 590,
+          "hidden": false
+        },
+        {
+          "name": "阵营图标",
+          "top": 0,
+          "left": 0,
+          "bottom": 0,
+          "right": 0,
+          "hidden": false,
+          "children": [
+            {
+              "name": "罗德岛",
+              "top": 642,
+              "left": 51,
+              "bottom": 1166,
+              "right": 614,
+              "hidden": false
+            },
+            {
+              "name": "卡西米尔",
+              "top": 686,
+              "left": 228,
+              "bottom": 1170,
+              "right": 566,
+              "hidden": true
+            },
+            {
+              "name": "岁",
+              "top": 684,
+              "left": 107,
+              "bottom": 1113,
+              "right": 590,
+              "hidden": true
+            },
+            {
+              "name": "炎",
+              "top": 686,
+              "left": 155,
+              "bottom": 1170,
+              "right": 575,
+              "hidden": true
+            },
+            {
+              "name": "莱茵生命",
+              "top": 846,
+              "left": 111,
+              "bottom": 1115,
+              "right": 578,
+              "hidden": true
+            },
+            {
+              "name": "使徒",
+              "top": 701,
+              "left": 181,
+              "bottom": 1180,
+              "right": 514,
+              "hidden": true
+            },
+            {
+              "name": "深海猎人",
+              "top": 730,
+              "left": 84,
+              "bottom": 1180,
+              "right": 590,
+              "hidden": true
+            },
+            {
+              "name": "萨米",
+              "top": 767,
+              "left": 159,
+              "bottom": 1160,
+              "right": 552,
+              "hidden": true
+            },
+            {
+              "name": "汐斯塔",
+              "top": 734,
+              "left": 104,
+              "bottom": 1133,
+              "right": 575,
+              "hidden": true
+            },
+            {
+              "name": "拉特兰",
+              "top": 759,
+              "left": 117,
+              "bottom": 1180,
+              "right": 576,
+              "hidden": true
+            },
+            {
+              "name": "莱塔尼亚",
+              "top": 780,
+              "left": 123,
+              "bottom": 1142,
+              "right": 575,
+              "hidden": true
+            },
+            {
+              "name": "萨尔贡",
+              "top": 796,
+              "left": 121,
+              "bottom": 1171,
+              "right": 575,
+              "hidden": true
+            },
+            {
+              "name": "企鹅物流",
+              "top": 741,
+              "left": 200,
+              "bottom": 1168,
+              "right": 502,
+              "hidden": true
+            },
+            {
+              "name": "黑钢国际",
+              "top": 810,
+              "left": 91,
+              "bottom": 1131,
+              "right": 590,
+              "hidden": true
+            },
+            {
+              "name": "鲤氏",
+              "top": 767,
+              "left": 200,
+              "bottom": 1138,
+              "right": 488,
+              "hidden": true
+            },
+            {
+              "name": "东国",
+              "top": 768,
+              "left": 215,
+              "bottom": 1144,
+              "right": 474,
+              "hidden": true
+            },
+            {
+              "name": "sweep",
+              "top": 767,
+              "left": 200,
+              "bottom": 1115,
+              "right": 522,
+              "hidden": true
+            },
+            {
+              "name": "叙拉古",
+              "top": 759,
+              "left": 159,
+              "bottom": 1160,
+              "right": 528,
+              "hidden": true
+            },
+            {
+              "name": "雷姆必拓",
+              "top": 836,
+              "left": 95,
+              "bottom": 1031,
+              "right": 590,
+              "hidden": true
+            },
+            {
+              "name": "维多利亚",
+              "top": 751,
+              "left": 117,
+              "bottom": 1116,
+              "right": 585,
+              "hidden": true
+            },
+            {
+              "name": "哥伦比亚",
+              "top": 741,
+              "left": 145,
+              "bottom": 1156,
+              "right": 575,
+              "hidden": true
+            },
+            {
+              "name": "喀兰贸易",
+              "top": 767,
+              "left": 164,
+              "bottom": 1150,
+              "right": 548,
+              "hidden": true
+            },
+            {
+              "name": "乌萨斯",
+              "top": 756,
+              "left": 110,
+              "bottom": 1098,
+              "right": 590,
+              "hidden": true
+            },
+            {
+              "name": "龙门近卫局",
+              "top": 759,
+              "left": 200,
+              "bottom": 1141,
+              "right": 473,
+              "hidden": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "正面",
+      "top": 0,
+      "left": 0,
+      "bottom": 0,
+      "right": 0,
+      "hidden": false,
+      "children": [
+        {
+          "name": "装饰图案",
+          "top": 0,
+          "left": 0,
+          "bottom": 0,
+          "right": 0,
+          "hidden": false,
+          "children": [
+            {
+              "name": "饰边",
+              "top": 0,
+              "left": 0,
+              "bottom": 1180,
+              "right": 590,
+              "hidden": false
+            },
+            {
+              "name": "明日方舟",
+              "top": 1102,
+              "left": 452,
+              "bottom": 1160,
+              "right": 575,
+              "hidden": false
+            },
+            {
+              "name": "渐变条纹",
+              "top": 684,
+              "left": 95,
+              "bottom": 1180,
+              "right": 108,
+              "hidden": false
+            }
+          ]
+        },
+        {
+          "name": "文字",
+          "top": 0,
+          "left": 0,
+          "bottom": 0,
+          "right": 0,
+          "hidden": false,
+          "children": [
+            {
+              "name": "ARKNIGHTS - R001 ",
+              "top": 1013,
+              "left": 70,
+              "bottom": 1164,
+              "right": 83,
+              "hidden": false,
+              "text": "ARKNIGHTS - R001",
+              "font": {
+                "name": "NotoSansHans-Bold",
+                "script": 3,
+                "type": 2,
+                "synthetic": 0
+              },
+              "fontSize": 16.66667,
+              "fillColor": {
+                "r": 0,
+                "g": 0,
+                "b": 0
+              }
+            },
+            {
+              "name": "generated_barcode",
+              "top": 850,
+              "left": 0,
+              "bottom": 1160,
+              "right": 55,
+              "hidden": false
+            },
+            {
+              "name": "AMIYA",
+              "top": 693,
+              "left": 115,
+              "bottom": 752,
+              "right": 277,
+              "hidden": false,
+              "text": "AMIYA",
+              "font": {
+                "name": "BebasNeue",
+                "script": 0,
+                "type": 0,
+                "synthetic": 0
+              },
+              "fontSize": 84.58334,
+              "fillColor": {
+                "r": 255,
+                "g": 255,
+                "b": 255
+              }
+            },
+            {
+              "name": "ARKNIGHTS - R001",
+              "top": 767,
+              "left": 115,
+              "bottom": 780,
+              "right": 266,
+              "hidden": false,
+              "text": "ARKNIGHTS - R001",
+              "font": {
+                "name": "NotoSansHans-Bold",
+                "script": 3,
+                "type": 2,
+                "synthetic": 0
+              },
+              "fontSize": 16.66667,
+              "fillColor": {
+                "r": 255,
+                "g": 255,
+                "b": 255
+              }
+            },
+            {
+              "name": "GUARD/RHODES ISLAND",
+              "top": 1131,
+              "left": 117,
+              "bottom": 1147,
+              "right": 303,
+              "hidden": false,
+              "text": "GUARD/RHODES ISLAND",
+              "font": {
+                "name": "NotoSansHans-Medium",
+                "script": 3,
+                "type": 2,
+                "synthetic": 0
+              },
+              "fontSize": 16.125,
+              "fillColor": {
+                "r": 255,
+                "g": 255,
+                "b": 255
+              }
+            },
+            {
+              "name": "the omertosa",
+              "top": 723,
+              "left": 282,
+              "bottom": 752,
+              "right": 471,
+              "hidden": true,
+              "text": "the omertosa",
+              "font": {
+                "name": "BebasNeue",
+                "script": 0,
+                "type": 0,
+                "synthetic": 0
+              },
+              "fontSize": 41.66667,
+              "fillColor": {
+                "r": 255,
+                "g": 255,
+                "b": 255
+              }
+            }
+          ]
+        },
+        {
+          "name": "职业图标",
+          "top": 0,
+          "left": 0,
+          "bottom": 0,
+          "right": 0,
+          "hidden": false,
+          "children": [
+            {
+              "name": "近卫图标",
+              "top": 993,
+              "left": 117,
+              "bottom": 1076,
+              "right": 200,
+              "hidden": false
+            },
+            {
+              "name": "狙击",
+              "top": 993,
+              "left": 117,
+              "bottom": 1076,
+              "right": 200,
+              "hidden": true
+            },
+            {
+              "name": "特种",
+              "top": 991,
+              "left": 115,
+              "bottom": 1078,
+              "right": 202,
+              "hidden": true
+            },
+            {
+              "name": "辅助图标",
+              "top": 993,
+              "left": 117,
+              "bottom": 1076,
+              "right": 200,
+              "hidden": true
+            },
+            {
+              "name": "重装",
+              "top": 991,
+              "left": 115,
+              "bottom": 1078,
+              "right": 202,
+              "hidden": true
+            },
+            {
+              "name": "先锋",
+              "top": 991,
+              "left": 115,
+              "bottom": 1078,
+              "right": 202,
+              "hidden": true
+            },
+            {
+              "name": "医疗",
+              "top": 993,
+              "left": 117,
+              "bottom": 1077,
+              "right": 200,
+              "hidden": true
+            },
+            {
+              "name": "术士",
+              "top": 994,
+              "left": 117,
+              "bottom": 1076,
+              "right": 200,
+              "hidden": true
+            }
+          ]
+        },
+        {
+          "name": "切割线",
+          "top": -3,
+          "left": -3,
+          "bottom": 1182,
+          "right": 592,
+          "hidden": true
+        }
+      ]
+    },
+    {
+      "name": "刀线",
+      "top": 0,
+      "left": 0,
+      "bottom": 1180,
+      "right": 590,
+      "hidden": true
+    }
+  ]
+}

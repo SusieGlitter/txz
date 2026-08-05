@@ -1,0 +1,6 @@
+{
+  "name": "通行证批量平面设计与生成工具",
+  "description": "基于PySide6/PIL反编译逻辑打造的在线交互式通行证/胸牌批量平面设计工具，支持人物数据库检索、照片剪裁对齐、自定义图层与渐变、矢量条形码生成、阵列刀模与多版面(正面/背面/白底/刀模)批量导出。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

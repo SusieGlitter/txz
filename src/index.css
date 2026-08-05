@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'BebasNeue';
+  src: url('/fonts/BebasNeue-Regular.otf') format('opentype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'NotoSansHans-Bold';
+  src: url('/fonts/NotoSansHans-Bold.otf') format('opentype');
+  font-weight: bold;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'AdobeHeitiStd';
+  src: url('/fonts/AdobeHeitiStd-Regular.otf') format('opentype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'NotoSansHans-Medium';
+  src: url('/fonts/AdobeHeitiStd-Regular.otf') format('opentype');
+  font-display: swap;
+}
+
