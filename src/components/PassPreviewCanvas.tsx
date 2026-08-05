@@ -75,13 +75,13 @@ export const PassPreviewCanvas: React.FC<PassPreviewCanvasProps> = ({
 
       switch (activeKind) {
         case 'front':
-          await renderFrontCard(ctx, info, img1Obj, e1Opts, customIconObj, layers, cutoutObj);
+          await renderFrontCard(ctx, info, img1Obj, e1Opts, customIconObj, layers, cutoutObj, true);
           break;
         case 'back':
-          await renderBackCard(ctx, info, cutoutObj, e1Opts, img1Obj, layers);
+          await renderBackCard(ctx, info, cutoutObj, e1Opts, img1Obj, layers, true);
           break;
         case 'white':
-          await renderWhiteCard(ctx, info, cutoutObj, e1Opts, img1Obj, customIconObj, layers);
+          await renderWhiteCard(ctx, info, cutoutObj, e1Opts, img1Obj, customIconObj, layers, true);
           break;
         case 'diecut':
           await renderDiecutCard(ctx);

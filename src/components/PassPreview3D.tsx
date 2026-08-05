@@ -192,7 +192,9 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
             characterPhoto: false, // In the middle layer
             baseboard: false, // In the middle layer
             factionWatermark: false, // In the middle layer
-          }
+          },
+          undefined,
+          true // Apply diecut for 3D preview
         );
 
         // --- B. Draw Front White Backing Layer ---
@@ -234,7 +236,8 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
             professionFactionText: false,
             borderOverlay: false,
           },
-          cutoutObj
+          cutoutObj,
+          true // Apply diecut for 3D preview
         );
 
         // --- D. Draw Back Print Layer ---
@@ -249,7 +252,8 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
           {
             ...DEFAULT_LAYER_VISIBILITY,
             characterPhoto: true, // Keep character silhouette enabled on back face
-          }
+          },
+          true // Apply diecut for 3D preview
         );
 
         // Notify Three.js textures that contents changed

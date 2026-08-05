@@ -76,7 +76,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
       // 1. 正面.png
       if (exportKinds.front) {
         ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-        await renderFrontCard(ctx, currentInfo, img1Obj, e1Opts, customIconObj, undefined, cutoutObj);
+        await renderFrontCard(ctx, currentInfo, img1Obj, e1Opts, customIconObj, undefined, cutoutObj, false);
         const dataUrl = canvas.toDataURL('image/png');
         folder.file('正面.png', dataUrl.split(',')[1], { base64: true });
       }
@@ -84,7 +84,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
       // 2. 背面.png
       if (exportKinds.back) {
         ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-        await renderBackCard(ctx, currentInfo, cutoutObj, e1Opts, img1Obj);
+        await renderBackCard(ctx, currentInfo, cutoutObj, e1Opts, img1Obj, undefined, false);
         const dataUrl = canvas.toDataURL('image/png');
         folder.file('背面.png', dataUrl.split(',')[1], { base64: true });
       }
@@ -92,7 +92,7 @@ export const BatchExportModal: React.FC<BatchExportModalProps> = ({
       // 3. 白墨.png
       if (exportKinds.white) {
         ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
-        await renderWhiteCard(ctx, currentInfo, cutoutObj, e1Opts, img1Obj, customIconObj);
+        await renderWhiteCard(ctx, currentInfo, cutoutObj, e1Opts, img1Obj, customIconObj, undefined, false);
         const dataUrl = canvas.toDataURL('image/png');
         folder.file('白墨.png', dataUrl.split(',')[1], { base64: true });
       }

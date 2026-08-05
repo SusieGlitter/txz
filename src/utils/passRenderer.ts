@@ -348,7 +348,8 @@ export async function renderFrontCard(
   e1Opts?: E1Options | null,
   customIconImg?: HTMLImageElement | null,
   layers?: LayerVisibilityConfig,
-  cutoutObj?: HTMLImageElement | null
+  cutoutObj?: HTMLImageElement | null,
+  applyDiecut: boolean = true
 ) {
   ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
@@ -555,7 +556,9 @@ export async function renderFrontCard(
   }
 
   await drawGradientStripe(ctx, false, layers);
-  await applyDiecutMask(ctx, false);
+  if (applyDiecut) {
+    await applyDiecutMask(ctx, false);
+  }
 }
 
 /**
@@ -567,7 +570,8 @@ export async function renderBackCard(
   cutoutObj?: HTMLImageElement | null,
   e1Opts?: E1Options | null,
   frontImgObj?: HTMLImageElement | null,
-  layers?: LayerVisibilityConfig
+  layers?: LayerVisibilityConfig,
+  applyDiecut: boolean = true
 ) {
   ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
@@ -701,7 +705,9 @@ export async function renderBackCard(
   }
 
   await drawGradientStripe(ctx, true, layers);
-  await applyDiecutMask(ctx, true);
+  if (applyDiecut) {
+    await applyDiecutMask(ctx, true);
+  }
 }
 
 /**
@@ -717,7 +723,8 @@ export async function renderWhiteCard(
   e1Opts?: E1Options | null,
   frontImgObj?: HTMLImageElement | null,
   customIconObj?: HTMLImageElement | null,
-  layers?: LayerVisibilityConfig
+  layers?: LayerVisibilityConfig,
+  applyDiecut: boolean = true
 ) {
   ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
@@ -839,7 +846,9 @@ export async function renderWhiteCard(
 
   // 3. Draw black stencil on transparent canvas
   ctx.drawImage(offCanvas, 0, 0);
-  await applyDiecutMask(ctx, true);
+  if (applyDiecut) {
+    await applyDiecutMask(ctx, true);
+  }
 }
 
 /**
