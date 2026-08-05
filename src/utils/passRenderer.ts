@@ -930,13 +930,12 @@ export function getDiecutMask(): Promise<HTMLCanvasElement | null> {
         }
       }
 
-      // BFS to find all connected transparent outside pixels
+      // Pass 1: identify the transparent outside region connected to the image border
       while (head < tail) {
         const curr = queue[head++];
         const cx = curr % w;
         const cy = Math.floor(curr / w);
 
-        // 4 neighbors
         const nxs = [cx - 1, cx + 1, cx, cx];
         const nys = [cy, cy, cy - 1, cy + 1];
 
@@ -957,22 +956,66 @@ export function getDiecutMask(): Promise<HTMLCanvasElement | null> {
         }
       }
 
-      // Fill a new image data where OUTSIDE is transparent, INSIDE is opaque white
+      // Pass 2: from the main body connected to the diecut contour, keep only the large connected body.
+      // This removes internal circular holes because they are not connected to the outer contour.
+      const bodyVisited = new Uint8Array(w * h);
+      const bodyQueue = new Int32Array(w * h);
+      let bodyHead = 0;
+      let bodyTail = 0;
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          const alpha = data[idx * 4 + 3];
+          const isSolid = alpha > 50;
+          const onBorder = x === 0 || x === w - 1 || y === 0 || y === h - 1;
+
+          if (isSolid && onBorder && !visited[idx]) {
+            bodyVisited[idx] = 1;
+            bodyQueue[bodyTail++] = idx;
+          }
+        }
+      }
+
+      while (bodyHead < bodyTail) {
+        const curr = bodyQueue[bodyHead++];
+        const cx = curr % w;
+        const cy = Math.floor(curr / w);
+
+        const nxs = [cx - 1, cx + 1, cx, cx];
+        const nys = [cy, cy, cy - 1, cy + 1];
+
+        for (let i = 0; i < 4; i++) {
+          const nx = nxs[i];
+          const ny = nys[i];
+
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            const nidx = ny * w + nx;
+            if (!bodyVisited[nidx]) {
+              const alpha = data[nidx * 4 + 3];
+              if (alpha > 50 && !visited[nidx]) {
+                bodyVisited[nidx] = 1;
+                bodyQueue[bodyTail++] = nidx;
+              }
+            }
+          }
+        }
+      }
+
+      // Final mask: keep only the large connected body; transparent outside + inside holes are both cut away.
       const maskImgData = tempCtx.createImageData(w, h);
       const mData = maskImgData.data;
       for (let i = 0; i < w * h; i++) {
-        if (visited[i] === 1) {
-          // Outside - transparent
-          mData[i * 4] = 0;
-          mData[i * 4 + 1] = 0;
-          mData[i * 4 + 2] = 0;
-          mData[i * 4 + 3] = 0;
-        } else {
-          // Inside or border line - opaque white
+        if (bodyVisited[i] === 1) {
           mData[i * 4] = 255;
           mData[i * 4 + 1] = 255;
           mData[i * 4 + 2] = 255;
           mData[i * 4 + 3] = 255;
+        } else {
+          mData[i * 4] = 0;
+          mData[i * 4 + 1] = 0;
+          mData[i * 4 + 2] = 0;
+          mData[i * 4 + 3] = 0;
         }
       }
 
