@@ -174,12 +174,14 @@ export const PassPreviewCanvas: React.FC<PassPreviewCanvasProps> = ({
           </div>
         )}
 
-        <div className={`relative transition-transform duration-300 ${isFullscreen ? 'scale-150' : 'scale-100'}`}>
+        <div className={`relative transition-all duration-300 ${isFullscreen ? 'p-10' : ''}`}>
           <canvas
             ref={canvasRef}
             width={CARD_WIDTH}
             height={CARD_HEIGHT}
-            className={`w-auto h-[480px] max-h-[75vh] rounded-none shadow-2xl border transition-all ${
+            className={`w-auto rounded-none shadow-2xl border transition-all ${
+              isFullscreen ? 'h-[800px] max-h-[90vh]' : 'h-[480px] max-h-[75vh]'
+            } ${
               activeKind === 'white' ? 'border-slate-400 shadow-slate-900/40 bg-white' : 'border-slate-700/60 hover:border-blue-500/50'
             }`}
           />

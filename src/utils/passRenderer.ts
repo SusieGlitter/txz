@@ -57,57 +57,57 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
  */
 export async function preloadPsdAssets() {
   const assets = [
-    '/psd_assets/中间__精一底板.png',
-    '/psd_assets/正面__装饰图案__饰边.png',
-    '/psd_assets/正面__装饰图案__渐变条纹.png',
-    '/psd_assets/正面__装饰图案__明日方舟.png',
-    '/psd_assets/背面__装饰__饰边.png',
-    '/psd_assets/背面__装饰__渐变条纹.png',
-    '/psd_assets/背面__文字__商标.png',
-    '/psd_assets/刀线.png',
+    './psd_assets/中间__精一底板.png',
+    './psd_assets/正面__装饰图案__饰边.png',
+    './psd_assets/正面__装饰图案__渐变条纹.png',
+    './psd_assets/正面__装饰图案__明日方舟.png',
+    './psd_assets/背面__装饰__饰边.png',
+    './psd_assets/背面__装饰__渐变条纹.png',
+    './psd_assets/背面__文字__商标.png',
+    './psd_assets/刀线.png',
 
     // Profession Icons
-    '/psd_assets/正面__职业图标__近卫图标.png',
-    '/psd_assets/正面__职业图标__狙击.png',
-    '/psd_assets/正面__职业图标__特种.png',
-    '/psd_assets/正面__职业图标__辅助图标.png',
-    '/psd_assets/正面__职业图标__重装.png',
-    '/psd_assets/正面__职业图标__先锋.png',
-    '/psd_assets/正面__职业图标__医疗.png',
-    '/psd_assets/正面__职业图标__术士.png',
+    './psd_assets/正面__职业图标__近卫图标.png',
+    './psd_assets/正面__职业图标__狙击.png',
+    './psd_assets/正面__职业图标__特种.png',
+    './psd_assets/正面__职业图标__辅助图标.png',
+    './psd_assets/正面__职业图标__重装.png',
+    './psd_assets/正面__职业图标__先锋.png',
+    './psd_assets/正面__职业图标__医疗.png',
+    './psd_assets/正面__职业图标__术士.png',
 
     // Barcode assets
-    '/psd_assets/正面__文字__generated_barcode.png',
-    '/psd_assets/正面__文字__ARKNIGHTS_-_R001_.png',
-    '/psd_assets/背面__generated_barcode.png',
-    '/psd_assets/背面__文字__ARKNIGHTS_-_MN04.png',
-    '/psd_assets/背面__装饰__条码.png',
+    './psd_assets/正面__文字__generated_barcode.png',
+    './psd_assets/正面__文字__ARKNIGHTS_-_R001_.png',
+    './psd_assets/背面__generated_barcode.png',
+    './psd_assets/背面__文字__ARKNIGHTS_-_MN04.png',
+    './psd_assets/背面__装饰__条码.png',
 
     // Faction Watermark Icons
-    '/psd_assets/中间__阵营图标__罗德岛.png',
-    '/psd_assets/中间__阵营图标__卡西米尔.png',
-    '/psd_assets/中间__阵营图标__岁.png',
-    '/psd_assets/中间__阵营图标__炎.png',
-    '/psd_assets/中间__阵营图标__莱茵生命.png',
-    '/psd_assets/中间__阵营图标__使徒.png',
-    '/psd_assets/中间__阵营图标__深海猎人.png',
-    '/psd_assets/中间__阵营图标__萨米.png',
-    '/psd_assets/中间__阵营图标__汐斯塔.png',
-    '/psd_assets/中间__阵营图标__拉特兰.png',
-    '/psd_assets/中间__阵营图标__莱塔尼亚.png',
-    '/psd_assets/中间__阵营图标__萨尔贡.png',
-    '/psd_assets/中间__阵营图标__企鹅物流.png',
-    '/psd_assets/中间__阵营图标__黑钢国际.png',
-    '/psd_assets/中间__阵营图标__鲤氏.png',
-    '/psd_assets/中间__阵营图标__东国.png',
-    '/psd_assets/中间__阵营图标__sweep.png',
-    '/psd_assets/中间__阵营图标__叙拉古.png',
-    '/psd_assets/中间__阵营图标__雷姆必拓.png',
-    '/psd_assets/中间__阵营图标__维多利亚.png',
-    '/psd_assets/中间__阵营图标__哥伦比亚.png',
-    '/psd_assets/中间__阵营图标__喀兰贸易.png',
-    '/psd_assets/中间__阵营图标__乌萨斯.png',
-    '/psd_assets/中间__阵营图标__龙门近卫局.png',
+    './psd_assets/中间__阵营图标__罗德岛.png',
+    './psd_assets/中间__阵营图标__卡西米尔.png',
+    './psd_assets/中间__阵营图标__岁.png',
+    './psd_assets/中间__阵营图标__炎.png',
+    './psd_assets/中间__阵营图标__莱茵生命.png',
+    './psd_assets/中间__阵营图标__使徒.png',
+    './psd_assets/中间__阵营图标__深海猎人.png',
+    './psd_assets/中间__阵营图标__萨米.png',
+    './psd_assets/中间__阵营图标__汐斯塔.png',
+    './psd_assets/中间__阵营图标__拉特兰.png',
+    './psd_assets/中间__阵营图标__莱塔尼亚.png',
+    './psd_assets/中间__阵营图标__萨尔贡.png',
+    './psd_assets/中间__阵营图标__企鹅物流.png',
+    './psd_assets/中间__阵营图标__黑钢国际.png',
+    './psd_assets/中间__阵营图标__鲤氏.png',
+    './psd_assets/中间__阵营图标__东国.png',
+    './psd_assets/中间__阵营图标__sweep.png',
+    './psd_assets/中间__阵营图标__叙拉古.png',
+    './psd_assets/中间__阵营图标__雷姆必拓.png',
+    './psd_assets/中间__阵营图标__维多利亚.png',
+    './psd_assets/中间__阵营图标__哥伦比亚.png',
+    './psd_assets/中间__阵营图标__喀兰贸易.png',
+    './psd_assets/中间__阵营图标__乌萨斯.png',
+    './psd_assets/中间__阵营图标__龙门近卫局.png',
   ];
 
   await Promise.all(assets.map(url => loadImage(url)));
@@ -148,16 +148,16 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
  */
 function getProfessionIconUrl(prof: string): string {
   switch (prof) {
-    case '近卫': return '/psd_assets/正面__职业图标__近卫图标.png';
-    case '狙击': return '/psd_assets/正面__职业图标__狙击.png';
-    case '特种': return '/psd_assets/正面__职业图标__特种.png';
-    case '辅助': return '/psd_assets/正面__职业图标__辅助图标.png';
-    case '重装': return '/psd_assets/正面__职业图标__重装.png';
-    case '先锋': return '/psd_assets/正面__职业图标__先锋.png';
-    case '医疗': return '/psd_assets/正面__职业图标__医疗.png';
+    case '近卫': return './psd_assets/正面__职业图标__近卫图标.png';
+    case '狙击': return './psd_assets/正面__职业图标__狙击.png';
+    case '特种': return './psd_assets/正面__职业图标__特种.png';
+    case '辅助': return './psd_assets/正面__职业图标__辅助图标.png';
+    case '重装': return './psd_assets/正面__职业图标__重装.png';
+    case '先锋': return './psd_assets/正面__职业图标__先锋.png';
+    case '医疗': return './psd_assets/正面__职业图标__医疗.png';
     case '术士':
-    case '术师': return '/psd_assets/正面__职业图标__术士.png';
-    default: return '/psd_assets/正面__职业图标__近卫图标.png';
+    case '术师': return './psd_assets/正面__职业图标__术士.png';
+    default: return './psd_assets/正面__职业图标__近卫图标.png';
   }
 }
 
@@ -206,42 +206,42 @@ export function getFactionIconPos(factionName: string): { x: number; y: number; 
 }
 
 function getFactionIconUrl(factionName: string): string | null {
-  if (!factionName) return '/psd_assets/中间__阵营图标__罗德岛.png';
+  if (!factionName) return './psd_assets/中间__阵营图标__罗德岛.png';
   const name = factionName.trim();
   const map: Record<string, string> = {
-    '罗德岛': '/psd_assets/中间__阵营图标__罗德岛.png',
-    '卡西米尔': '/psd_assets/中间__阵营图标__卡西米尔.png',
-    '岁': '/psd_assets/中间__阵营图标__岁.png',
-    '炎': '/psd_assets/中间__阵营图标__炎.png',
-    '莱茵生命': '/psd_assets/中间__阵营图标__莱茵生命.png',
-    '使徒': '/psd_assets/中间__阵营图标__使徒.png',
-    '深海猎人': '/psd_assets/中间__阵营图标__深海猎人.png',
-    '萨米': '/psd_assets/中间__阵营图标__萨米.png',
-    '汐斯塔': '/psd_assets/中间__阵营图标__汐斯塔.png',
-    '拉特兰': '/psd_assets/中间__阵营图标__拉特兰.png',
-    '莱塔尼亚': '/psd_assets/中间__阵营图标__莱塔尼亚.png',
-    '萨尔贡': '/psd_assets/中间__阵营图标__萨尔贡.png',
-    '企鹅物流': '/psd_assets/中间__阵营图标__企鹅物流.png',
-    '黑钢国际': '/psd_assets/中间__阵营图标__黑钢国际.png',
-    '鲤氏': '/psd_assets/中间__阵营图标__鲤氏.png',
-    '鲤氏侦探事务所': '/psd_assets/中间__阵营图标__鲤氏.png',
-    '东国': '/psd_assets/中间__阵营图标__东国.png',
-    'sweep': '/psd_assets/中间__阵营图标__sweep.png',
-    'SWEEP': '/psd_assets/中间__阵营图标__sweep.png',
-    '叙拉古': '/psd_assets/中间__阵营图标__叙拉古.png',
-    '雷姆必拓': '/psd_assets/中间__阵营图标__雷姆必拓.png',
-    '维多利亚': '/psd_assets/中间__阵营图标__维多利亚.png',
-    '哥伦比亚': '/psd_assets/中间__阵营图标__哥伦比亚.png',
-    '喀兰贸易': '/psd_assets/中间__阵营图标__喀兰贸易.png',
-    '乌萨斯': '/psd_assets/中间__阵营图标__乌萨斯.png',
-    '龙门近卫局': '/psd_assets/中间__阵营图标__龙门近卫局.png',
-    '龙门': '/psd_assets/中间__阵营图标__龙门近卫局.png',
+    '罗德岛': './psd_assets/中间__阵营图标__罗德岛.png',
+    '卡西米尔': './psd_assets/中间__阵营图标__卡西米尔.png',
+    '岁': './psd_assets/中间__阵营图标__岁.png',
+    '炎': './psd_assets/中间__阵营图标__炎.png',
+    '莱茵生命': './psd_assets/中间__阵营图标__莱茵生命.png',
+    '使徒': './psd_assets/中间__阵营图标__使徒.png',
+    '深海猎人': './psd_assets/中间__阵营图标__深海猎人.png',
+    '萨米': './psd_assets/中间__阵营图标__萨米.png',
+    '汐斯塔': './psd_assets/中间__阵营图标__汐斯塔.png',
+    '拉特兰': './psd_assets/中间__阵营图标__拉特兰.png',
+    '莱塔尼亚': './psd_assets/中间__阵营图标__莱塔尼亚.png',
+    '萨尔贡': './psd_assets/中间__阵营图标__萨尔贡.png',
+    '企鹅物流': './psd_assets/中间__阵营图标__企鹅物流.png',
+    '黑钢国际': './psd_assets/中间__阵营图标__黑钢国际.png',
+    '鲤氏': './psd_assets/中间__阵营图标__鲤氏.png',
+    '鲤氏侦探事务所': './psd_assets/中间__阵营图标__鲤氏.png',
+    '东国': './psd_assets/中间__阵营图标__东国.png',
+    'sweep': './psd_assets/中间__阵营图标__sweep.png',
+    'SWEEP': './psd_assets/中间__阵营图标__sweep.png',
+    '叙拉古': './psd_assets/中间__阵营图标__叙拉古.png',
+    '雷姆必拓': './psd_assets/中间__阵营图标__雷姆必拓.png',
+    '维多利亚': './psd_assets/中间__阵营图标__维多利亚.png',
+    '哥伦比亚': './psd_assets/中间__阵营图标__哥伦比亚.png',
+    '喀兰贸易': './psd_assets/中间__阵营图标__喀兰贸易.png',
+    '乌萨斯': './psd_assets/中间__阵营图标__乌萨斯.png',
+    '龙门近卫局': './psd_assets/中间__阵营图标__龙门近卫局.png',
+    '龙门': './psd_assets/中间__阵营图标__龙门近卫局.png',
   };
 
   for (const k in map) {
     if (name.includes(k)) return map[k];
   }
-  return '/psd_assets/中间__阵营图标__罗德岛.png';
+  return './psd_assets/中间__阵营图标__罗德岛.png';
 }
 
 /**
@@ -367,7 +367,7 @@ export async function renderFrontCard(
   // ONLY rendered in E1 mode (E2 hides bottom baseboard)
   // 改为卡面基础色彩 (baseColor) 填充
   if (!isE2 && layers?.baseboard !== false) {
-    const baseboardImg = imageCache.get('/psd_assets/中间__精一底板.png') || await loadImage('/psd_assets/中间__精一底板.png');
+    const baseboardImg = imageCache.get('./psd_assets/中间__精一底板.png') || await loadImage('./psd_assets/中间__精一底板.png');
     if (isImageValid(baseboardImg)) {
       const bbCanvas = document.createElement('canvas');
       bbCanvas.width = 590;
@@ -412,7 +412,7 @@ export async function renderFrontCard(
 
   // 5. Decorative Overlays & Border Overlay
   if (layers?.borderOverlay !== false) {
-    const gradStripeImg = imageCache.get('/psd_assets/正面__装饰图案__渐变条纹.png') || await loadImage('/psd_assets/正面__装饰图案__渐变条纹.png');
+    const gradStripeImg = imageCache.get('./psd_assets/正面__装饰图案__渐变条纹.png') || await loadImage('./psd_assets/正面__装饰图案__渐变条纹.png');
     if (isImageValid(gradStripeImg)) {
       const offCanvas = document.createElement('canvas');
       offCanvas.width = 13;
@@ -429,14 +429,14 @@ export async function renderFrontCard(
       }
     }
 
-    const arknightsLogoImg = imageCache.get('/psd_assets/正面__装饰图案__明日方舟.png') || await loadImage('/psd_assets/正面__装饰图案__明日方舟.png');
+    const arknightsLogoImg = imageCache.get('./psd_assets/正面__装饰图案__明日方舟.png') || await loadImage('./psd_assets/正面__装饰图案__明日方舟.png');
     if (isImageValid(arknightsLogoImg)) {
       ctx.drawImage(arknightsLogoImg, 452, 1102, 123, 58);
     }
 
     // Border Overlay (正面 / 装饰图案 / 饰边: pos x: 0, y: 0, w: 590, h: 1180)
     // Drawn BELOW barcode & text layers so barcode is on top!
-    const borderImg = imageCache.get('/psd_assets/正面__装饰图案__饰边.png') || await loadImage('/psd_assets/正面__装饰图案__饰边.png');
+    const borderImg = imageCache.get('./psd_assets/正面__装饰图案__饰边.png') || await loadImage('./psd_assets/正面__装饰图案__饰边.png');
     if (isImageValid(borderImg)) {
       ctx.drawImage(borderImg, 0, 0, 590, 1180);
     }
@@ -579,7 +579,7 @@ export async function renderBackCard(
 
   // 3. Back Decorative Overlays & Back Border Overlay
   if (layers?.borderOverlay !== false) {
-    const backStripeImg = imageCache.get('/psd_assets/背面__装饰__渐变条纹.png') || await loadImage('/psd_assets/背面__装饰__渐变条纹.png');
+    const backStripeImg = imageCache.get('./psd_assets/背面__装饰__渐变条纹.png') || await loadImage('./psd_assets/背面__装饰__渐变条纹.png');
     if (isImageValid(backStripeImg)) {
       const offCanvas = document.createElement('canvas');
       offCanvas.width = 13;
@@ -596,14 +596,14 @@ export async function renderBackCard(
       }
     }
 
-    const trademarkImg = imageCache.get('/psd_assets/背面__文字__商标.png') || await loadImage('/psd_assets/背面__文字__商标.png');
+    const trademarkImg = imageCache.get('./psd_assets/背面__文字__商标.png') || await loadImage('./psd_assets/背面__文字__商标.png');
     if (isImageValid(trademarkImg)) {
       ctx.drawImage(trademarkImg, 121, 669, 317, 54);
     }
 
     // Back Border Overlay (背面 / 装饰 / 饰边: pos x: 0, y: 0, w: 590, h: 1180)
     // Drawn BEFORE barcode so barcode sits ON TOP of border!
-    const backBorderImg = imageCache.get('/psd_assets/背面__装饰__饰边.png') || await loadImage('/psd_assets/背面__装饰__饰边.png');
+    const backBorderImg = imageCache.get('./psd_assets/背面__装饰__饰边.png') || await loadImage('./psd_assets/背面__装饰__饰边.png');
     if (isImageValid(backBorderImg)) {
       ctx.drawImage(backBorderImg, 0, 0, 590, 1180);
     }
@@ -703,7 +703,7 @@ export async function renderWhiteCard(
 
   // B. E1 Baseboard Overlay (精一底板 - 若有)
   if (!isE2 && layers?.baseboard !== false) {
-    const baseboardImg = imageCache.get('/psd_assets/中间__精一底板.png') || await loadImage('/psd_assets/中间__精一底板.png');
+    const baseboardImg = imageCache.get('./psd_assets/中间__精一底板.png') || await loadImage('./psd_assets/中间__精一底板.png');
     if (isImageValid(baseboardImg)) {
       offCtx.drawImage(baseboardImg, 0, 685, 590, 495);
     }
@@ -711,7 +711,7 @@ export async function renderWhiteCard(
 
   // C. Border Overlay (饰边/边框)
   if (layers?.borderOverlay !== false) {
-    const borderImg = imageCache.get('/psd_assets/正面__装饰图案__饰边.png') || await loadImage('/psd_assets/正面__装饰图案__饰边.png');
+    const borderImg = imageCache.get('./psd_assets/正面__装饰图案__饰边.png') || await loadImage('./psd_assets/正面__装饰图案__饰边.png');
     if (isImageValid(borderImg)) {
       offCtx.drawImage(borderImg, 0, 0, 590, 1180);
     }
@@ -782,7 +782,7 @@ export async function renderWhiteCard(
 export async function renderDiecutCard(ctx: CanvasRenderingContext2D) {
   ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
-  const diecutImg = imageCache.get('/psd_assets/刀线.png') || await loadImage('/psd_assets/刀线.png');
+  const diecutImg = imageCache.get('./psd_assets/刀线.png') || await loadImage('./psd_assets/刀线.png');
   if (isImageValid(diecutImg)) {
     ctx.drawImage(diecutImg, 0, 0, 590, 1180);
   }
