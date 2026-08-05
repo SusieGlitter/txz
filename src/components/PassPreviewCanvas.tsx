@@ -105,9 +105,40 @@ export const PassPreviewCanvas: React.FC<PassPreviewCanvasProps> = ({
     }));
   };
 
-  const handleDownloadSingle = () => {
+  const handleDownloadSingle = async () => {
     if (!canvasRef.current) return;
-    const dataUrl = canvasRef.current.toDataURL('image/png');
+    
+    // 创建临时canvas用于渲染无刀线裁切的版本
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = CARD_WIDTH;
+    tempCanvas.height = CARD_HEIGHT;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    if (!tempCtx) return;
+
+    const [img1Obj, cutoutObj, customIconObj] = await Promise.all([
+      frontPhotoUrl ? loadImage(frontPhotoUrl) : Promise.resolve(null),
+      cutoutPhotoUrl ? loadImage(cutoutPhotoUrl) : Promise.resolve(null),
+      customIconUrl ? loadImage(customIconUrl) : Promise.resolve(null),
+    ]);
+
+    // 根据当前激活的类型渲染无刀线裁切的版本
+    switch (activeKind) {
+      case 'front':
+        await renderFrontCard(tempCtx, info, img1Obj, e1Opts, customIconObj, layers, cutoutObj, false);
+        break;
+      case 'back':
+        await renderBackCard(tempCtx, info, cutoutObj, e1Opts, img1Obj, layers, false);
+        break;
+      case 'white':
+        await renderWhiteCard(tempCtx, info, cutoutObj, e1Opts, img1Obj, customIconObj, layers, false);
+        break;
+      case 'diecut':
+        await renderDiecutCard(tempCtx);
+        break;
+    }
+
+    const dataUrl = tempCanvas.toDataURL('image/png');
     const kindNames: Record<PreviewKind, string> = {
       front: '正面',
       back: '背面',
