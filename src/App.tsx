@@ -215,6 +215,14 @@ export default function App() {
                   小红书@Y教主黄铜
                 </a>
                 <a
+                  href="https://lpptxzscq.com/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-amber-300 hover:text-amber-200 transition"
+                >
+                  龙泡泡通行证生成器
+                </a>
+                <a
                   href="https://github.com/SusieGlitter/txz"
                   target="_blank"
                   rel="noreferrer noopener"

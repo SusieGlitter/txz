@@ -12,6 +12,7 @@ import {
   Settings,
   HelpCircle,
   RefreshCw,
+  Video,
 } from 'lucide-react';
 import { PassCardInfo, E1Options, DEFAULT_LAYER_VISIBILITY } from '../types';
 import {
@@ -20,9 +21,17 @@ import {
   loadImage,
   preloadPsdAssets,
   getDiecutMask,
+  FONTS_LOADED_EVENT,
+  areFontsLoaded,
   CARD_WIDTH,
   CARD_HEIGHT,
 } from '../utils/passRenderer';
+import {
+  buildDiecutShape,
+  createFallbackShape,
+  CARD_W3D,
+  CARD_H3D,
+} from '../utils/diecutShape';
 
 interface PassPreview3DProps {
   info: PassCardInfo;
@@ -51,6 +60,11 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const [isPreloading, setIsPreloading] = useState<boolean>(true);
   const [isUpdatingTextures, setIsUpdatingTextures] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isRecordingGif, setIsRecordingGif] = useState<boolean>(false);
+
+  // 刀线形状（含孔洞）——由刀线 mask 提取，用于构建真实扫出体积的亚克力几何体
+  const [diecutShape, setDiecutShape] = useState<THREE.Shape | null>(null);
+  const [shapeFailed, setShapeFailed] = useState<boolean>(false);
 
   // Hidden offscreen canvas refs for texture rendering
   const frontCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -63,6 +77,11 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
+
+  // 旋转 GIF 录制相关引用
+  const isRecordingGifRef = useRef<boolean>(false);
+  const recordGifRef = useRef<(() => Promise<void>) | null>(null);
+  const passGroupRef = useRef<THREE.Group | null>(null);
 
   // Geometry and Mesh references
   const acrylicMeshRef = useRef<THREE.Mesh | null>(null);
@@ -79,6 +98,26 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
 
   // Track loaded asset URLs to avoid redundant draw operations
   const [canvasKey, setCanvasKey] = useState<number>(0);
+
+  // 字体加载完成后重新生成纹理（保证画布文字使用自定义字体）
+  const [fontTick, setFontTick] = useState<number>(0);
+
+  // 监听字体加载完成事件 → 立即重建 3D 纹理
+  useEffect(() => {
+    let isMounted = true;
+    const onFontsLoaded = () => {
+      if (isMounted) setFontTick((t) => t + 1);
+    };
+    if (!areFontsLoaded() && document.fonts && document.fonts.status === 'loading') {
+      document.fonts.addEventListener('loadingdone', onFontsLoaded);
+    }
+    window.addEventListener(FONTS_LOADED_EVENT, onFontsLoaded);
+    return () => {
+      isMounted = false;
+      if (document.fonts) document.fonts.removeEventListener('loadingdone', onFontsLoaded);
+      window.removeEventListener(FONTS_LOADED_EVENT, onFontsLoaded);
+    };
+  }, []);
 
   const toggleFullscreen = async () => {
     const target = containerRef.current;
@@ -123,6 +162,29 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       active = false;
     };
   }, []);
+
+  // 1.5. Extract diecut contour shape from mask (外轮廓 + 孔洞)
+  useEffect(() => {
+    if (isPreloading) return;
+    let active = true;
+    (async () => {
+      try {
+        const mask = await getDiecutMask();
+        if (!active) return;
+        const shape = buildDiecutShape(mask);
+        if (active) {
+          setDiecutShape(shape);
+          if (!shape) setShapeFailed(true);
+        }
+      } catch (err) {
+        console.error('Failed to build diecut shape:', err);
+        if (active) setShapeFailed(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isPreloading]);
 
   // 2. Offscreen Canvas Initializer
   useEffect(() => {
@@ -277,11 +339,11 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isPreloading, info, e1Opts, frontPhotoUrl, cutoutPhotoUrl, customIconUrl]);
+  }, [isPreloading, info, e1Opts, frontPhotoUrl, cutoutPhotoUrl, customIconUrl, fontTick]);
 
   // 4. Initialize and Render 3D Canvas Scene
   useEffect(() => {
-    if (isPreloading || !containerRef.current) return;
+    if (isPreloading || (!diecutShape && !shapeFailed)) return;
 
     const container = containerRef.current;
     const width = container.clientWidth || 500;
@@ -296,7 +358,13 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     camera.position.set(0, 0, 16);
 
     // C. WebGL Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, premultipliedAlpha: false });
+    // preserveDrawingBuffer: 允许录制 GIF 时读取帧缓冲（逐帧 drawImage）
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      premultipliedAlpha: false,
+      preserveDrawingBuffer: true,
+    });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
@@ -315,23 +383,27 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     controls.maxPolarAngle = Math.PI / 1.1; // Don't let users go completely under the table
     controlsRef.current = controls;
 
-    // E. Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    // E. Lighting（更亮、更柔和的散射光源）
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
 
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, lightIntensity * 0.8);
+    // 半球光：模拟天空+地面的柔和环境光，让卡面受光更均匀
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8899bb, 0.55);
+    scene.add(hemiLight);
+
+    const dirLight1 = new THREE.DirectionalLight(0xffffff, lightIntensity * 1.2);
     dirLight1.position.set(5, 8, 5);
     dirLight1.castShadow = true;
     dirLight1.shadow.mapSize.width = 1024;
     dirLight1.shadow.mapSize.height = 1024;
     scene.add(dirLight1);
 
-    const dirLight2 = new THREE.DirectionalLight(0xbbe1ff, lightIntensity * 0.4);
+    const dirLight2 = new THREE.DirectionalLight(0xbbe1ff, lightIntensity * 0.7);
     dirLight2.position.set(-8, -4, 4);
     scene.add(dirLight2);
 
     // Dynamic point light following camera to give polished acrylic specular highlights
-    const pointLight = new THREE.PointLight(0xffffff, 0.8, 50);
+    const pointLight = new THREE.PointLight(0xffffff, 1.5, 50);
     scene.add(pointLight);
 
     // F. Texture Bindings
@@ -358,31 +430,22 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
 
     // G. Create Acrylic and Print Layers Group
     const passGroup = new THREE.Group();
+    passGroupRef.current = passGroup;
     scene.add(passGroup);
 
     // Dimension scales: 10 * 5 * 0.47 cm.
     // In our 3D space, we map 1cm to 1.0 units.
-    // Card Width = 5.0, Card Height = 10.0, Card Depth = 0.47
-    const w = 5.0;
-    const h = 10.0;
-    const d = thickness;
+    // Card Width = 5.0, Card Height = 10.0, Card Depth = thickness
+    const w = CARD_W3D;
+    const h = CARD_H3D;
 
-    // Use a sharp rectangular top face. The real acrylic plate should follow the diecut contour directly,
-    // without any rounded-corner smoothing or beveling.
-    const shape = new THREE.Shape();
-    const x = -w / 2;
-    const y = -h / 2;
-    shape.moveTo(x, y);
-    shape.lineTo(x + w, y);
-    shape.lineTo(x + w, y + h);
-    shape.lineTo(x, y + h);
-    shape.closePath();
+    // 刀线形状：外轮廓 + 内部孔洞。亚克力实体 = 该形状沿厚度方向扫出的真实体积。
+    // 若 mask 提取失败则退化为完整矩形卡面。
+    const shape = diecutShape ?? createFallbackShape();
 
     // 1. Acrylic Base Mesh
-    // The acrylic plate should be treated as a straight swept solid generated from the boundary contour:
-    // - top face: the plate face area
-    // - side wall: the vertical extrusion of the boundary edges along thickness
-    // - no bevel: the manufacturing boundary is kept sharp and square
+    // 亚克力板 = 刀线保留区域沿厚度方向扫出的柱体（含内部孔洞，无倒角）。
+    // 顶面/底面：清透半透明玻璃观感（不模拟折射率，仅半透明叠加透出印刷层）；侧面：磨砂效果。
     const extrudeSettings = {
       steps: 1,
       depth: 1.0,
@@ -396,62 +459,69 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     const acrylicGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
     acrylicGeo.center(); // Center geometry around (0,0,0) so front face is at +halfD and back is at -halfD
 
-    // The diecut mask may contain holes (e.g. circular openings). We should respect that in 3D as well.
-    // We use the same mask as a cutout alpha on the transparent acrylic body so the interior holes do not appear solid.
+    // 顶面/底面（两个水平印刷面）：清透亚克力玻璃质感，半透明叠加显示印刷层
     const capMat = new THREE.MeshPhysicalMaterial({
       color: new THREE.Color('#ffffff'),
-      roughness: 0.02,
+      roughness: 0.12,
       metalness: 0.0,
-      transparent: false,
-      alphaTest: 0.5,
-      opacity: 1.0,
-      transmission: 0.98,
-      ior: 1.49,
-      thickness: thickness,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.02,
+      transparent: true,
+      opacity: 0.2, // 更透亮，减轻灰蒙蒙观感
+      clearcoat: 0.4,
+      clearcoatRoughness: 0.12,
       specularIntensity: 1.0,
       side: THREE.FrontSide,
-      depthWrite: false, // Transparent glass shouldn't block depth-test of objects behind it
+      depthWrite: false, // 不写深度，让背后的印刷层透过半透明面可见
     });
 
+    // 程序生成的磨砂噪声纹理（模拟激光切割侧面的磨砂颗粒感）
+    const createFrostedBump = () => {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const c2d = canvas.getContext('2d')!;
+      const img = c2d.createImageData(size, size);
+      const d = img.data;
+      for (let i = 0; i < size * size; i++) {
+        const v = 128 + Math.random() * 64; // 中灰噪声，用于 bump 起伏
+        d[i * 4] = v;
+        d[i * 4 + 1] = v;
+        d[i * 4 + 2] = v;
+        d[i * 4 + 3] = 255;
+      }
+      c2d.putImageData(img, 0, 0);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(12, 6);
+      tex.needsUpdate = true;
+      return tex;
+    };
+    const frostedBump = createFrostedBump();
+
+    // 侧面：半透明磨砂（取修改前完全不透明磨砂与修改后半透明的中间值）
     const sideMat = new THREE.MeshPhysicalMaterial({
       color: new THREE.Color('#ffffff'),
-      roughness: 0.9, // Higher roughness for a very frosted / matte laser-cut look!
+      roughness: 0.9, // 磨砂但保留部分透光
       metalness: 0.0,
-      transparent: false,
-      alphaTest: 0.5,
-      opacity: 1.0,
-      transmission: 0.1, // Lower transmission because it's frosted/scattered
-      ior: 1.49,
-      thickness: thickness,
-      clearcoat: 0.1, // Low clearcoat on frosted side
-      clearcoatRoughness: 0.6,
-      specularIntensity: 0.3,
+      transparent: true,
+      opacity: 0.78,
+      clearcoat: 0.0, // 无清漆高光
+      clearcoatRoughness: 1.0,
+      specularIntensity: 0.1,
+      bumpMap: frostedBump, // 磨砂颗粒
+      bumpScale: 0.12,
       side: THREE.FrontSide,
-      depthWrite: false,
+      depthWrite: false, // 透明材质不写深度
     });
 
-    const acrylicMesh = new THREE.Mesh(acrylicGeo, [capMat, sideMat]);
+    // ExtrudeGeometry 材质组：group 0 = 顶面+底面（水平印刷面，用 capMat），group 1 = 侧面（用 sideMat）
+    const acrylicMesh = new THREE.Mesh(acrylicGeo, [capMat, sideMat, capMat]);
     acrylicMesh.receiveShadow = true;
     acrylicMesh.renderOrder = 3;
     acrylicMesh.scale.set(1, 1, thickness); // Scale along Z for thickness
     passGroup.add(acrylicMesh);
     acrylicMeshRef.current = acrylicMesh;
-
-    getDiecutMask().then((maskCanvas) => {
-      if (maskCanvas) {
-        const diecutTexture = new THREE.CanvasTexture(maskCanvas);
-        diecutTexture.colorSpace = THREE.SRGBColorSpace;
-        diecutTexture.needsUpdate = true;
-        capMat.alphaMap = diecutTexture;
-        capMat.alphaTest = 0.1;
-        capMat.needsUpdate = true;
-        sideMat.alphaMap = diecutTexture;
-        sideMat.alphaTest = 0.1;
-        sideMat.needsUpdate = true;
-      }
-    });
 
     // Helper to assign correct [0, 1] texture coordinates based on X/Y card dimensions
     const assignUVs = (geometry: THREE.BufferGeometry, width: number, height: number, flipU: boolean = false) => {
@@ -476,7 +546,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     };
 
     // 2. Printed Layers Setup
-    // Use ShapeGeometry matching the rounded contour shape so all layers are cut by the diecut path!
+    // 印刷层使用与亚克力相同的刀线 Shape（含孔洞），保证所有印刷面按刀线轮廓裁剪
     const planeGeo = new THREE.ShapeGeometry(shape);
     assignUVs(planeGeo, w, h, false);
 
@@ -485,9 +555,11 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     assignUVs(backPlaneGeo, w, h, true);
 
     // A. Front Print (正面最外层) - faces front
+    // 印刷层使用不透明渲染（transparent:false）+ alphaTest 丢弃挖空区域，
+    // 不模拟折射，直接以"直见"方式贴在卡表面，透过半透明亚克力面可见。
     const frontMat = new THREE.MeshBasicMaterial({
       map: frontTex,
-      transparent: true,
+      transparent: false,
       alphaTest: 0.1,
       side: THREE.FrontSide, // Only visible from front
       depthWrite: true, // Write depth to handle spatial occlusion automatically
@@ -500,7 +572,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     // B. Front White Backing (正面白墨底) - faces back (looking from inside out) - horizontally mirrored
     const frontBackingMat = new THREE.MeshBasicMaterial({
       map: frontBackingTex,
-      transparent: true,
+      transparent: false,
       alphaTest: 0.1,
       side: THREE.BackSide, // Only visible from inside/back
       depthWrite: true,
@@ -513,7 +585,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     // C. Middle Print Layer (中层：立绘、底板、阵营) - faces front, printed inside back
     const middleMat = new THREE.MeshBasicMaterial({
       map: middleTex,
-      transparent: true,
+      transparent: false,
       alphaTest: 0.1,
       side: THREE.DoubleSide, // Double sided so standing cutout and graphics are visible looking from front or back
       depthWrite: true,
@@ -526,7 +598,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     // D. Back Print (背面最外层：商标、背景、条码等) - faces back with flipped U coordinates so back text reads normally
     const backMat = new THREE.MeshBasicMaterial({
       map: backTex,
-      transparent: true,
+      transparent: false,
       alphaTest: 0.1,
       side: THREE.BackSide, // Only visible from back
       depthWrite: true,
@@ -568,6 +640,67 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     shadowMesh.position.y = -6;
     shadowMesh.receiveShadow = true;
     scene.add(shadowMesh);
+
+    // 录制旋转 GIF：手动将通行证绕 Y 轴旋转 360°，逐帧渲染并编码为 GIF 下载
+    const recordGif = async () => {
+      if (isRecordingGifRef.current) return;
+      isRecordingGifRef.current = true;
+      setIsRecordingGif(true);
+
+      const wasAutoRotate = autoRotateRef.current;
+      autoRotateRef.current = false; // 暂停自动旋转，避免叠加
+      if (controls) controls.enabled = false; // 录制期间锁定视角
+
+      const startAngle = passGroup.rotation.y;
+      const frames = 240; // 240 帧绕一圈（16 秒，15fps）
+      const delayMs = 1000 / 15;
+      const targetW = 360;
+      const cssW = renderer.domElement.clientWidth || 500;
+      const cssH = renderer.domElement.clientHeight || 550;
+      const targetH = Math.max(1, Math.round((cssH / cssW) * targetW));
+
+      try {
+        // 让"录制中"状态先渲染出来
+        await new Promise((r) => setTimeout(r, 30));
+        const { GIFEncoder, quantize, applyPalette } = await import('gifenc');
+        const gif = GIFEncoder();
+        const off = document.createElement('canvas');
+        off.width = targetW;
+        off.height = targetH;
+        const offCtx = off.getContext('2d', { willReadFrequently: true });
+        if (!offCtx) throw new Error('无法创建离屏画布');
+
+        for (let i = 0; i < frames; i++) {
+          passGroup.rotation.y = startAngle + (i / frames) * Math.PI * 2;
+          renderer.render(scene, camera);
+          offCtx.clearRect(0, 0, targetW, targetH);
+          offCtx.drawImage(renderer.domElement, 0, 0, targetW, targetH);
+          const { data } = offCtx.getImageData(0, 0, targetW, targetH);
+          const palette = quantize(data, 256);
+          const index = applyPalette(data, palette);
+          gif.writeFrame(index, targetW, targetH, { palette, delay: delayMs, repeat: 0 });
+        }
+        gif.finish();
+        const blob = new Blob([gif.bytes()], { type: 'image/gif' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `通行证旋转预览_${info.english_name || info.chinese_name || 'card'}.gif`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch (err) {
+        console.error('录制 GIF 失败:', err);
+      } finally {
+        passGroup.rotation.y = startAngle;
+        autoRotateRef.current = wasAutoRotate;
+        if (controls) controls.enabled = true;
+        isRecordingGifRef.current = false;
+        setIsRecordingGif(false);
+      }
+    };
+    recordGifRef.current = recordGif;
 
     // Render loop
     const animate = () => {
@@ -630,8 +763,12 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       frontBackingTex.dispose();
       middleTex.dispose();
       backTex.dispose();
+      frostedBump.dispose();
+
+      passGroupRef.current = null;
+      recordGifRef.current = null;
     };
-  }, [isPreloading]);
+  }, [isPreloading, diecutShape, shapeFailed]);
 
   // 5. Dynamic prop updates (Thickness, Tint) without fully rebuilding Scene
   useEffect(() => {
@@ -656,7 +793,6 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     // Update Acrylic Core geometry and scale when thickness changes
     if (acrylicMeshRef.current) {
       acrylicMeshRef.current.scale.set(1, 1, thickness);
-      // Removed tint updates
     }
   }, [thickness, canvasKey]);
 
@@ -694,6 +830,19 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
           >
             <RotateCw className={`w-4 h-4 ${autoRotate ? 'animate-spin [animation-duration:8s]' : ''}`} />
             <span className="text-[10px] font-bold px-0.5">{autoRotate ? '自动旋转中' : '已暂停旋转'}</span>
+          </button>
+          <button
+            onClick={() => recordGifRef.current?.()}
+            disabled={isRecordingGif}
+            className={`p-2 rounded-lg transition flex items-center gap-1.5 ${
+              isRecordingGif
+                ? 'bg-amber-600 text-white cursor-wait'
+                : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+            }`}
+            title="录制通行证旋转 GIF（绕一圈 16 秒）"
+          >
+            <Video className="w-4 h-4" />
+            <span className="text-[10px] font-bold px-0.5">{isRecordingGif ? '录制中...' : '录制 GIF'}</span>
           </button>
           <button
             onClick={() => {

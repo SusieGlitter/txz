@@ -19,6 +19,8 @@ import {
   renderDiecutCard,
   loadImage,
   preloadPsdAssets,
+  FONTS_LOADED_EVENT,
+  areFontsLoaded,
   CARD_WIDTH,
   CARD_HEIGHT,
 } from '../utils/passRenderer';
@@ -51,6 +53,27 @@ export const PassPreviewCanvas: React.FC<PassPreviewCanvasProps> = ({
 
   // Layer visibility state
   const [layers, setLayers] = useState<LayerVisibilityConfig>(DEFAULT_LAYER_VISIBILITY);
+
+  // 字体加载完成后触发重绘（保证画布文字使用自定义字体）
+  const [fontTick, setFontTick] = useState<number>(0);
+
+  // 监听字体加载完成事件 → 立即重新渲染 2D 预览
+  useEffect(() => {
+    if (tab !== '2d') return;
+    let isMounted = true;
+    const onFontsLoaded = () => {
+      if (isMounted) setFontTick((t) => t + 1);
+    };
+    if (!areFontsLoaded() && document.fonts && document.fonts.status === 'loading') {
+      document.fonts.addEventListener('loadingdone', onFontsLoaded);
+    }
+    window.addEventListener(FONTS_LOADED_EVENT, onFontsLoaded);
+    return () => {
+      isMounted = false;
+      if (document.fonts) document.fonts.removeEventListener('loadingdone', onFontsLoaded);
+      window.removeEventListener(FONTS_LOADED_EVENT, onFontsLoaded);
+    };
+  }, [tab]);
 
   useEffect(() => {
     if (tab !== '2d') return; // Only render 2D canvas if tab is 2D
@@ -96,7 +119,7 @@ export const PassPreviewCanvas: React.FC<PassPreviewCanvasProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeKind, info, e1Opts, frontPhotoUrl, cutoutPhotoUrl, customIconUrl, layers, tab]);
+  }, [activeKind, info, e1Opts, frontPhotoUrl, cutoutPhotoUrl, customIconUrl, layers, tab, fontTick]);
 
   const handleToggleLayer = (key: keyof LayerVisibilityConfig) => {
     setLayers((prev) => ({

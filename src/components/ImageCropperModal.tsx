@@ -30,10 +30,16 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   // Step 2: Selection crop box (590 : 1180 aspect ratio frame - 1:2 ratio)
   const [cropBoxScale, setCropBoxScale] = useState<number>(1.0);
   const [cropBoxPos, setCropBoxPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // 裁切框旋转角度（弧度，canvas 坐标系下顺时针为正）
+  const [cropBoxRotation, setCropBoxRotation] = useState<number>(0);
 
-  // Interaction mode: 'cutout' | 'cropbox'
-  const [dragTarget, setDragTarget] = useState<'cutout' | 'cropbox' | null>(null);
+  // Interaction mode: 'cutout' | 'cropbox' | 'resize' | 'rotate'
+  const [dragTarget, setDragTarget] = useState<'cutout' | 'cropbox' | 'resize' | 'rotate' | null>(null);
+  // 拖动角点时记录角点所在象限（局部坐标符号）
+  const [dragCorner, setDragCorner] = useState<{ sx: number; sy: number } | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  // 悬停时鼠标样式：'move' | 'resize' | 'rotate' | null
+  const [hoverMode, setHoverMode] = useState<'move' | 'resize' | 'rotate' | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frontImgRef = useRef<HTMLImageElement | null>(null);
@@ -52,14 +58,64 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   };
 
   // Helper to get crop box rect based on scale and position
+  // 返回中心 + 未旋转时的宽高（保持 1:2 比例）+ 旋转角度
   const getCropBoxRect = (cWidth: number, cHeight: number) => {
     const baseW = 250;
     const baseH = 500;
     const w = baseW * cropBoxScale;
     const h = baseH * cropBoxScale;
-    const x = (cWidth - w) / 2 + cropBoxPos.x;
-    const y = (cHeight - h) / 2 + cropBoxPos.y;
-    return { x, y, w, h };
+    const cx = cWidth / 2 + cropBoxPos.x;
+    const cy = cHeight / 2 + cropBoxPos.y;
+    const x = cx - w / 2;
+    const y = cy - h / 2;
+    return { x, y, w, h, cx, cy, rotation: cropBoxRotation };
+  };
+
+  // 画布坐标 → 裁切框局部坐标（局部 x 沿框宽方向，局部 y 沿框高方向）
+  const toLocal = (cropBox: ReturnType<typeof getCropBoxRect>, px: number, py: number) => {
+    const dx = px - cropBox.cx;
+    const dy = py - cropBox.cy;
+    const cos = Math.cos(cropBox.rotation);
+    const sin = Math.sin(cropBox.rotation);
+    return {
+      lx: dx * cos + dy * sin,
+      ly: -dx * sin + dy * cos,
+    };
+  };
+
+  // 局部坐标 → 画布坐标
+  const toCanvas = (cropBox: ReturnType<typeof getCropBoxRect>, lx: number, ly: number) => {
+    const cos = Math.cos(cropBox.rotation);
+    const sin = Math.sin(cropBox.rotation);
+    return {
+      x: cropBox.cx + lx * cos - ly * sin,
+      y: cropBox.cy + lx * sin + ly * cos,
+    };
+  };
+
+  // 旋转框四个角点的画布坐标（局部 ±halfW / ±halfH）
+  const getRotatedCorners = (cropBox: ReturnType<typeof getCropBoxRect>) => {
+    const halfW = cropBox.w / 2;
+    const halfH = cropBox.h / 2;
+    const corners: { x: number; y: number }[] = [];
+    for (const sx of [1, -1]) {
+      for (const sy of [1, -1]) {
+        corners.push(toCanvas(cropBox, sx * halfW, sy * halfH));
+      }
+    }
+    return corners;
+  };
+
+  // 旋转框 Path2D（用于裁剪 / 暗化外部）
+  const buildRotatedPath = (cropBox: ReturnType<typeof getCropBoxRect>) => {
+    const path = new Path2D();
+    const corners = getRotatedCorners(cropBox);
+    path.moveTo(corners[0].x, corners[0].y);
+    path.lineTo(corners[1].x, corners[1].y);
+    path.lineTo(corners[2].x, corners[2].y);
+    path.lineTo(corners[3].x, corners[3].y);
+    path.closePath();
+    return path;
   };
 
   // Load images when opened & reset step
@@ -69,6 +125,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     setCutoutPos({ x: 0, y: 0 });
     setCutoutScale(1.0);
     setIsBlinking(true);
+    setCropBoxRotation(0);
 
     if (frontPhotoUrl) {
       const img = new Image();
@@ -135,13 +192,11 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     // 0. Checkerboard grid inside crop box to visualize transparent overflow areas
     const cropBox = getCropBoxRect(canvas.width, canvas.height);
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(cropBox.x, cropBox.y, cropBox.w, cropBox.h);
-    ctx.clip();
+    ctx.clip(buildRotatedPath(cropBox));
 
     const tileSize = 12;
-    for (let cx = cropBox.x; cx < cropBox.x + cropBox.w; cx += tileSize) {
-      for (let cy = cropBox.y; cy < cropBox.y + cropBox.h; cy += tileSize) {
+    for (let cx = cropBox.x - 24; cx < cropBox.x + cropBox.w + 24; cx += tileSize) {
+      for (let cy = cropBox.y - 24; cy < cropBox.y + cropBox.h + 24; cy += tileSize) {
         const isEven = (Math.floor((cx - cropBox.x) / tileSize) + Math.floor((cy - cropBox.y) / tileSize)) % 2 === 0;
         ctx.fillStyle = isEven ? '#1e293b' : '#0f172a';
         ctx.fillRect(cx, cy, tileSize, tileSize);
@@ -180,55 +235,61 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     // 3. Render Aspect Ratio Selection Crop Frame (590:1180 Frame)
     ctx.save();
     if (step === 'crop') {
-      // Darken outside crop frame in Step 2
+      // Darken outside crop frame in Step 2 (evenodd: 全屏暗色矩形挖去旋转框)
       ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-      ctx.fillRect(0, 0, canvas.width, cropBox.y);
-      ctx.fillRect(0, cropBox.y + cropBox.h, canvas.width, canvas.height - (cropBox.y + cropBox.h));
-      ctx.fillRect(0, cropBox.y, cropBox.x, cropBox.h);
-      ctx.fillRect(
-        cropBox.x + cropBox.w,
-        cropBox.y,
-        canvas.width - (cropBox.x + cropBox.w),
-        cropBox.h
-      );
+      const outsidePath = new Path2D();
+      outsidePath.rect(0, 0, canvas.width, canvas.height);
+      outsidePath.addPath(buildRotatedPath(cropBox));
+      ctx.fill(outsidePath, 'evenodd');
 
+      // 旋转框虚线边框
       ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
-      ctx.strokeRect(cropBox.x, cropBox.y, cropBox.w, cropBox.h);
+      ctx.stroke(buildRotatedPath(cropBox));
       ctx.setLineDash([]);
 
+      // 四个角点手柄（8×8 方块，随框旋转）
       ctx.fillStyle = '#38bdf8';
-      const handleSize = 8;
-      ctx.fillRect(cropBox.x - handleSize / 2, cropBox.y - handleSize / 2, handleSize, handleSize);
-      ctx.fillRect(
-        cropBox.x + cropBox.w - handleSize / 2,
-        cropBox.y - handleSize / 2,
-        handleSize,
-        handleSize
-      );
-      ctx.fillRect(
-        cropBox.x - handleSize / 2,
-        cropBox.y + cropBox.h - handleSize / 2,
-        handleSize,
-        handleSize
-      );
-      ctx.fillRect(
-        cropBox.x + cropBox.w - handleSize / 2,
-        cropBox.y + cropBox.h - handleSize / 2,
-        handleSize,
-        handleSize
-      );
+      const handleSize = 10;
+      for (const corner of getRotatedCorners(cropBox)) {
+        ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize);
+      }
 
+      // 顶部旋转手柄：连接线 + 圆形手柄
+      const rotHandle = toCanvas(cropBox, 0, -cropBox.h / 2 - 26);
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cropBox.cx, cropBox.cy - cropBox.h / 2);
+      ctx.lineTo(rotHandle.x, rotHandle.y);
+      ctx.stroke();
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(rotHandle.x, rotHandle.y, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 旋转角度显示（接近 0 时显示 0°）
+      const deg = Math.round((cropBoxRotation * 180) / Math.PI);
       ctx.fillStyle = '#38bdf8';
       ctx.font = 'bold 11px sans-serif';
-      ctx.fillText('通行证卡面裁切框 (590:1180)', cropBox.x + 8, cropBox.y + 18);
+      ctx.fillText(
+        `通行证卡面裁切框 (590:1180)  旋转 ${((deg % 360) + 360) % 360}°`,
+        cropBox.x + 8,
+        cropBox.y + 18
+      );
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.9)';
+      ctx.font = '10px sans-serif';
+      ctx.fillText('拖动四角调整大小 · 拖动顶部圆柄旋转 · 框内拖动移动', cropBox.x + 8, cropBox.y + 32);
     } else {
       // In Step 1, render subtle preview outline for reference
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
-      ctx.strokeRect(cropBox.x, cropBox.y, cropBox.w, cropBox.h);
+      ctx.stroke(buildRotatedPath(cropBox));
       ctx.setLineDash([]);
       ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
       ctx.font = '10px sans-serif';
@@ -236,7 +297,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     }
 
     ctx.restore();
-  }, [isOpen, step, cutoutPos, cutoutScale, blinkVisible, cropBoxScale, cropBoxPos]);
+  }, [isOpen, step, cutoutPos, cutoutScale, blinkVisible, cropBoxScale, cropBoxPos, cropBoxRotation]);
 
   if (!isOpen) return null;
 
@@ -251,18 +312,66 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       // Step 1: Mouse drags Cutout image alignment
       setDragTarget('cutout');
       setDragStart({ x: clickX - cutoutPos.x, y: clickY - cutoutPos.y });
-    } else {
-      // Step 2: Mouse drags Crop box position
+      return;
+    }
+
+    // Step 2: 命中检测（优先角点 → 旋转手柄 → 框内）
+    const ws = canvasRef.current;
+    const cropBox = getCropBoxRect(ws.width, ws.height);
+    const { lx, ly } = toLocal(cropBox, clickX, clickY);
+    const halfW = cropBox.w / 2;
+    const halfH = cropBox.h / 2;
+
+    // 1) 角点手柄（含微小的边缘容差，方便命中）
+    const cornerHitDist = 12;
+    for (const sx of [1, -1]) {
+      for (const sy of [1, -1]) {
+        if (Math.abs(lx - sx * halfW) < cornerHitDist && Math.abs(ly - sy * halfH) < cornerHitDist) {
+          setDragTarget('resize');
+          setDragCorner({ sx, sy });
+          return;
+        }
+      }
+    }
+
+    // 2) 顶部旋转手柄（局部 (0, -halfH-26)）
+    const rotHandleLocal = { lx: 0, ly: -halfH - 26 };
+    if (Math.abs(lx - rotHandleLocal.lx) < 16 && Math.abs(ly - rotHandleLocal.ly) < 16) {
+      setDragTarget('rotate');
+      return;
+    }
+
+    // 3) 框内 → 平移
+    if (Math.abs(lx) <= halfW && Math.abs(ly) <= halfH) {
       setDragTarget('cropbox');
       setDragStart({ x: clickX - cropBoxPos.x, y: clickY - cropBoxPos.y });
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!dragTarget || !canvasRef.current) return;
+    if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const moveX = e.clientX - rect.left;
     const moveY = e.clientY - rect.top;
+
+    // 未拖动时更新悬停光标样式
+    if (!dragTarget) {
+      if (step === 'crop') {
+        const ws = canvasRef.current;
+        const cropBox = getCropBoxRect(ws.width, ws.height);
+        const { lx, ly } = toLocal(cropBox, moveX, moveY);
+        const halfW = cropBox.w / 2;
+        const halfH = cropBox.h / 2;
+        const cornerHit = [1, -1].some((sx) =>
+          [1, -1].some((sy) => Math.abs(lx - sx * halfW) < 12 && Math.abs(ly - sy * halfH) < 12)
+        );
+        const rotHandleHit = Math.abs(lx) < 16 && Math.abs(ly - (-halfH - 26)) < 16;
+        setHoverMode(rotHandleHit ? 'rotate' : cornerHit ? 'resize' : Math.abs(lx) <= halfW && Math.abs(ly) <= halfH ? 'move' : null);
+      } else {
+        setHoverMode(null);
+      }
+      return;
+    }
 
     if (dragTarget === 'cutout') {
       setCutoutPos({
@@ -270,16 +379,30 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         y: moveY - dragStart.y,
       });
     } else if (dragTarget === 'cropbox') {
-      const cropBox = getCropBoxRect(canvasRef.current.width, canvasRef.current.height);
-      // Let's just constrain the dragging so cropBox doesn't completely leave canvas
-      // But cropBoxPos is the center offset.
+      const ws = canvasRef.current;
       const newX = moveX - dragStart.x;
       const newY = moveY - dragStart.y;
       setCropBoxPos({ x: newX, y: newY });
+    } else if (dragTarget === 'resize') {
+      // 拖动角点：以框中心为锚，保持 1:2 比例改变大小
+      const ws = canvasRef.current;
+      const cropBox = getCropBoxRect(ws.width, ws.height);
+      const { lx, ly } = toLocal(cropBox, moveX, moveY);
+      const newScale = Math.min(2.0, Math.max(0.4, Math.max(Math.abs(lx) / 125, Math.abs(ly) / 250)));
+      setCropBoxScale(newScale);
+    } else if (dragTarget === 'rotate') {
+      // 拖动旋转手柄：绕框中心旋转
+      const ws = canvasRef.current;
+      const cropBox = getCropBoxRect(ws.width, ws.height);
+      const angle = Math.atan2(moveY - cropBox.cy, moveX - cropBox.cx);
+      setCropBoxRotation(angle);
     }
   };
 
-  const handleMouseUp = () => setDragTarget(null);
+  const handleMouseUp = () => {
+    setDragTarget(null);
+    setDragCorner(null);
+  };
 
   // 短边对齐 (Short Edge Alignment)
   const handleShortEdgeFit = () => {
@@ -305,6 +428,23 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const handleResetCropBox = () => {
     setCropBoxScale(1.0);
     setCropBoxPos({ x: 0, y: 0 });
+    setCropBoxRotation(0);
+  };
+
+  // 设置输出画布变换：工作区坐标 → 裁切框局部坐标(逆旋转) → 缩放 → 590x1180 输出坐标
+  // p_out = T(centerOut) · S(590/w) · R(-rotation) · T(-center) · p_ws
+  const setupOutputTransform = (
+    ctx: CanvasRenderingContext2D,
+    cropBox: ReturnType<typeof getCropBoxRect>,
+    targetW: number,
+    targetH: number
+  ) => {
+    const scaleX = targetW / cropBox.w;
+    const scaleY = targetH / cropBox.h;
+    ctx.translate(targetW / 2, targetH / 2);
+    ctx.scale(scaleX, scaleY);
+    ctx.rotate(-cropBox.rotation);
+    ctx.translate(-cropBox.cx, -cropBox.cy);
   };
 
   // Confirm Alignment & Crop Output (Supports overflow with transparent fill)
@@ -315,9 +455,6 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     if (!wsCanvas) return;
 
     const cropBox = getCropBoxRect(wsCanvas.width, wsCanvas.height);
-
-    // Scale from workspace cropBox coordinate space to target 590x1180 output canvas
-    const scaleFactor = targetW / cropBox.w;
 
     // 1. Output Front Photo
     const frontCanvas = document.createElement('canvas');
@@ -330,12 +467,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       const img = frontImgRef.current;
       const { x: dx, y: dy, w: drawW, h: drawH } = getBaseRect(img.width, img.height, wsCanvas.width, wsCanvas.height);
 
-      const outX = (dx - cropBox.x) * scaleFactor;
-      const outY = (dy - cropBox.y) * scaleFactor;
-      const outW = drawW * scaleFactor;
-      const outH = drawH * scaleFactor;
-
-      fCtx.drawImage(img, outX, outY, outW, outH);
+      setupOutputTransform(fCtx, cropBox, targetW, targetH);
+      fCtx.drawImage(img, dx, dy, drawW, drawH);
     }
 
     // 2. Output Cutout Photo
@@ -358,12 +491,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         const finalX = dx + (baseW - finalW) / 2;
         const finalY = dy + (baseH - finalH) / 2;
 
-        const outX = (finalX - cropBox.x) * scaleFactor;
-        const outY = (finalY - cropBox.y) * scaleFactor;
-        const outW = finalW * scaleFactor;
-        const outH = finalH * scaleFactor;
-
-        cCtx.drawImage(activeImg, outX, outY, outW, outH);
+        setupOutputTransform(cCtx, cropBox, targetW, targetH);
+        cCtx.drawImage(activeImg, finalX, finalY, finalW, finalH);
       }
     }
 
@@ -441,7 +570,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           <div className="flex flex-wrap items-center justify-between bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-xs gap-2">
             <span className="text-slate-300 flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />
-              <strong>步骤二：框选通行证卡面区域。</strong>拖动蓝框确定 590:1180 范围，超出区域透明填充。
+              <strong>步骤二：框选通行证卡面区域。</strong>拖动四角调整大小（保持 1:2），拖动顶部圆柄旋转，拖动框内移动。超出区域透明填充。
             </span>
             <button
               onClick={handleResetCropBox}
@@ -463,7 +592,17 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            className="cursor-move rounded-lg border border-slate-800 shadow-inner"
+            className={`rounded-lg border border-slate-800 shadow-inner ${
+              step === 'crop'
+                ? hoverMode === 'resize'
+                  ? 'cursor-nwse-resize'
+                  : hoverMode === 'rotate'
+                    ? 'cursor-crosshair'
+                    : hoverMode === 'move'
+                      ? 'cursor-move'
+                      : 'cursor-default'
+                : 'cursor-move'
+            }`}
           />
         </div>
 
@@ -510,7 +649,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-800/60 p-3 rounded-xl border border-slate-800 text-xs">
             {/* Crop Box Zoom Slider */}
-            <div className="flex items-center gap-2 sm:col-span-3">
+            <div className="flex items-center gap-2 sm:col-span-2">
               <ZoomOut className="w-4 h-4 text-slate-400 shrink-0" />
               <span className="text-slate-400 text-[11px] shrink-0">裁剪框缩放:</span>
               <input
@@ -525,10 +664,24 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
               <ZoomIn className="w-4 h-4 text-slate-400 shrink-0" />
             </div>
 
-            <div className="flex items-center justify-end">
+            {/* Rotation display & reset */}
+            <div className="flex items-center gap-2 justify-end sm:col-span-2">
+              <span className="text-slate-300 font-mono shrink-0">
+                旋转 {((Math.round((cropBoxRotation * 180) / Math.PI) % 360) + 360) % 360}°
+              </span>
+              <button
+                onClick={() => setCropBoxRotation(0)}
+                className={`px-2.5 py-1.5 rounded-lg transition font-medium ${
+                  cropBoxRotation === 0
+                    ? 'bg-slate-800/50 text-slate-600 cursor-default'
+                    : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40'
+                }`}
+              >
+                旋转归零
+              </button>
               <button
                 onClick={handleResetCropBox}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition font-medium"
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition font-medium"
               >
                 默认居中
               </button>

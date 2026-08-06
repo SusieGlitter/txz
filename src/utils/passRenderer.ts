@@ -138,50 +138,70 @@ export async function preloadPsdAssets() {
   await Promise.all(assets.map(url => loadImage(url)));
 
   // Ensure OTF fonts from /fonts are loaded for Canvas rendering
-  if (typeof document !== 'undefined' && typeof FontFace !== 'undefined') {
+  await ensureFontsLoaded();
+}
+
+// 字体加载完成后派发的全局事件（供预览组件监听后立即重绘）
+export const FONTS_LOADED_EVENT = 'pass:fonts-loaded';
+
+let fontsLoaded = false;
+let fontsLoadedPromise: Promise<void> | null = null;
+
+/**
+ * 确保 4 个自定义 OTF 字体已注册到 document.fonts。
+ * 加载完成后派发 FONTS_LOADED_EVENT，预览组件监听该事件刷新画布中的文字。
+ */
+export function ensureFontsLoaded(): Promise<void> {
+  if (fontsLoadedPromise) return fontsLoadedPromise;
+  fontsLoadedPromise = (async () => {
+    if (typeof document === 'undefined' || typeof FontFace === 'undefined') {
+      if (typeof document !== 'undefined' && document.fonts) {
+        try {
+          await Promise.all([
+            document.fonts.load('85px "BebasNeue"'),
+            document.fonts.load('17px "NotoSansHans-Bold"'),
+            document.fonts.load('16px "AdobeHeitiStd"'),
+            document.fonts.load('16px "NotoSansHans-Medium"'),
+          ]);
+          await document.fonts.ready;
+        } catch (err) {
+          console.warn('Font loading notice:', err);
+        }
+      }
+      fontsLoaded = true;
+      return;
+    }
     try {
       const fontsList = Array.from(document.fonts.values());
-      const hasBebas = fontsList.some(f => f.family === 'BebasNeue');
-      if (!hasBebas) {
-        const bebasNeueFont = new FontFace('BebasNeue', 'url(/fonts/BebasNeue-Regular.otf)');
-        const loadedFont = await bebasNeueFont.load();
-        document.fonts.add(loadedFont);
-      }
-      const hasNotoBold = fontsList.some(f => f.family === 'NotoSansHans-Bold');
-      if (!hasNotoBold) {
-        const notoBoldFont = new FontFace('NotoSansHans-Bold', 'url(/fonts/NotoSansHans-Bold.otf)', { weight: 'bold' });
-        const loadedFont = await notoBoldFont.load();
-        document.fonts.add(loadedFont);
-      }
-      const hasHeiti = fontsList.some(f => f.family === 'AdobeHeitiStd');
-      if (!hasHeiti) {
-        const heitiFont = new FontFace('AdobeHeitiStd', 'url(/fonts/AdobeHeitiStd-Regular.otf)');
-        const loadedFont = await heitiFont.load();
-        document.fonts.add(loadedFont);
-      }
-      const hasNotoMedium = fontsList.some(f => f.family === 'NotoSansHans-Medium');
-      if (!hasNotoMedium) {
-        const notoMediumFont = new FontFace('NotoSansHans-Medium', 'url(/fonts/NotoSansHans-Medium.otf)');
-        const loadedFont = await notoMediumFont.load();
-        document.fonts.add(loadedFont);
-      }
+      const loadIfMissing = async (family: string, src: string, options?: FontFaceDescriptors) => {
+        if (fontsList.some(f => f.family === family)) return;
+        const face = new FontFace(family, src, options);
+        const loaded = await face.load();
+        document.fonts.add(loaded);
+      };
+      await Promise.all([
+        loadIfMissing('BebasNeue', 'url(/fonts/BebasNeue-Regular.otf)'),
+        loadIfMissing('NotoSansHans-Bold', 'url(/fonts/NotoSansHans-Bold.otf)', { weight: 'bold' }),
+        loadIfMissing('AdobeHeitiStd', 'url(/fonts/AdobeHeitiStd-Regular.otf)'),
+        loadIfMissing('NotoSansHans-Medium', 'url(/fonts/NotoSansHans-Medium.otf)'),
+      ]);
       await document.fonts.ready;
     } catch (err) {
       console.warn('Programmatic font loading notice:', err);
     }
-  } else if (typeof document !== 'undefined' && document.fonts) {
-    try {
-      await Promise.all([
-        document.fonts.load('85px "BebasNeue"'),
-        document.fonts.load('17px "NotoSansHans-Bold"'),
-        document.fonts.load('16px "AdobeHeitiStd"'),
-        document.fonts.load('16px "NotoSansHans-Medium"'),
-      ]);
-      await document.fonts.ready;
-    } catch (err) {
-      console.warn('Font loading notice:', err);
+    fontsLoaded = true;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(FONTS_LOADED_EVENT));
     }
-  }
+  })();
+  return fontsLoadedPromise;
+}
+
+/**
+ * 判断自定义字体是否已经加载完成
+ */
+export function areFontsLoaded(): boolean {
+  return fontsLoaded;
 }
 
 // Convert Hex to RGB
