@@ -25,3 +25,16 @@
   font-display: swap;
 }
 
+/* 日间模式（浅色）：整体反色切换；对图片/画布再反色一次，保持内容原始颜色 */
+html.light-mode {
+  filter: invert(1) hue-rotate(180deg);
+  background-color: #f8fafc;
+  color-scheme: light;
+}
+html.light-mode img,
+html.light-mode canvas,
+html.light-mode video,
+html.light-mode iframe {
+  filter: invert(1) hue-rotate(180deg);
+}
+

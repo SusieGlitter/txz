@@ -8,6 +8,8 @@ import {
   FileText,
   Github,
   HelpCircle,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { CharacterRecord, E1Options, PassCardInfo, PreviewKind } from './types';
 import { DEFAULT_CHARACTERS } from './data/defaultCharacters';
@@ -84,6 +86,24 @@ export default function App() {
   const [isCropModalOpen, setIsCropModalOpen] = useState<boolean>(false);
   const [isIconAdjustModalOpen, setIsIconAdjustModalOpen] = useState<boolean>(false);
   const [isBatchExportModalOpen, setIsBatchExportModalOpen] = useState<boolean>(false);
+
+  // 7. 日夜模式（日间模式通过 html.light-mode 反色实现，默认夜间）
+  const [isLightMode, setIsLightMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('PASS_GEN_LIGHT_MODE') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light-mode', isLightMode);
+    try {
+      localStorage.setItem('PASS_GEN_LIGHT_MODE', isLightMode ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [isLightMode]);
 
   // Save character DB to localStorage on changes
   useEffect(() => {
@@ -243,6 +263,14 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsLightMode((prev) => !prev)}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-700/60 hover:border-slate-500/60 bg-slate-800/60 hover:bg-slate-700/60 text-slate-300 hover:text-white transition text-xs font-medium"
+              title={isLightMode ? '切换到夜间模式' : '切换到日间模式'}
+            >
+              {isLightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-amber-400" />}
+              <span>{isLightMode ? '夜间' : '日间'}</span>
+            </button>
             <button
               onClick={() => setIsBatchExportModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium text-xs sm:text-sm transition shadow-lg shadow-purple-500/20"
