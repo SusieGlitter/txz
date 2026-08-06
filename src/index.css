@@ -25,11 +25,40 @@
   font-display: swap;
 }
 
+/* 夜间模式（默认）：固定深色滚动条，不跟随系统 */
+html {
+  color-scheme: dark;
+  scrollbar-color: #475569 #1e293b;
+}
+/* `*` 匹配包括 html 自身在内的所有元素，覆盖页面级 viewport 滚动条与容器滚动条 */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+*::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 5px;
+}
+
 /* 日间模式（浅色）：整体反色切换；对图片/画布再反色一次，保持内容原始颜色 */
 html.light-mode {
   filter: invert(1) hue-rotate(180deg);
   background-color: #f8fafc;
   color-scheme: light;
+  /* 原生滚动条不参与反色，需显式切换为浅色 */
+  scrollbar-color: #94a3b8 #e2e8f0;
+}
+html.light-mode::-webkit-scrollbar-track,
+html.light-mode *::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+html.light-mode::-webkit-scrollbar-thumb,
+html.light-mode *::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 5px;
 }
 html.light-mode img,
 html.light-mode canvas,

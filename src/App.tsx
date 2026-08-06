@@ -265,18 +265,17 @@ export default function App() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsLightMode((prev) => !prev)}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-700/60 hover:border-slate-500/60 bg-slate-800/60 hover:bg-slate-700/60 text-slate-300 hover:text-white transition text-xs font-medium"
+              className="flex items-center justify-center w-9 h-9 rounded-xl border border-slate-700/60 hover:border-slate-500/60 bg-slate-800/60 hover:bg-slate-700/60 text-slate-300 hover:text-white transition"
               title={isLightMode ? '切换到夜间模式' : '切换到日间模式'}
             >
               {isLightMode ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-amber-400" />}
-              <span>{isLightMode ? '夜间' : '日间'}</span>
             </button>
             <button
               onClick={() => setIsBatchExportModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium text-xs sm:text-sm transition shadow-lg shadow-purple-500/20"
             >
               <Archive className="w-4 h-4" />
-              批量打包生成 (ZIP 导出)
+              导出
             </button>
           </div>
         </div>
