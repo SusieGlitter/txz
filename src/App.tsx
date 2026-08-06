@@ -223,6 +223,14 @@ export default function App() {
                   龙泡泡通行证生成器
                 </a>
                 <a
+                  href="https://space.bilibili.com/194240635"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-pink-300 hover:text-pink-200 transition"
+                >
+                  哔哩哔哩@子龙Zara
+                </a>
+                <a
                   href="https://github.com/SusieGlitter/txz"
                   target="_blank"
                   rel="noreferrer noopener"
