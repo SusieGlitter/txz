@@ -154,23 +154,30 @@ let fontsLoadedPromise: Promise<void> | null = null;
 export function ensureFontsLoaded(): Promise<void> {
   if (fontsLoadedPromise) return fontsLoadedPromise;
   fontsLoadedPromise = (async () => {
-    if (typeof document === 'undefined' || typeof FontFace === 'undefined') {
-      if (typeof document !== 'undefined' && document.fonts) {
-        try {
-          await Promise.all([
-            document.fonts.load('85px "BebasNeue"'),
-            document.fonts.load('17px "NotoSansHans-Bold"'),
-            document.fonts.load('16px "AdobeHeitiStd"'),
-            document.fonts.load('16px "NotoSansHans-Medium"'),
-          ]);
-          await document.fonts.ready;
-        } catch (err) {
-          console.warn('Font loading notice:', err);
-        }
+    // 场景1：非浏览器环境（document 不存在），无字体可加载，直接标记完成
+    if (typeof document === 'undefined') {
+      fontsLoaded = true;
+      return;
+    }
+
+    // 场景2：浏览器环境但 FontFace 构造器不可用，退化为 document.fonts.load 后备方式
+    if (typeof FontFace === 'undefined') {
+      try {
+        await Promise.all([
+          document.fonts.load('85px "BebasNeue"'),
+          document.fonts.load('17px "NotoSansHans-Bold"'),
+          document.fonts.load('16px "AdobeHeitiStd"'),
+          document.fonts.load('16px "NotoSansHans-Medium"'),
+        ]);
+        await document.fonts.ready;
+      } catch (err) {
+        console.warn('Font loading notice:', err);
       }
       fontsLoaded = true;
       return;
     }
+
+    // 场景3：正常浏览器环境，用 FontFace 构造并注册
     try {
       const fontsList = Array.from(document.fonts.values());
       const loadIfMissing = async (family: string, src: string, options?: FontFaceDescriptors) => {

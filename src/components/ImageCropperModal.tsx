@@ -9,6 +9,54 @@ interface ImageCropperModalProps {
   onApplyCropped: (croppedFront: string, croppedCutout: string) => void;
 }
 
+// ---- 裁剪配置记忆（按图片 URL 组合哈希存储到 localStorage）----
+interface CropState {
+  cutoutPos: { x: number; y: number };
+  cutoutScale: number;
+  cropBoxScale: number;
+  cropBoxPos: { x: number; y: number };
+  cropBoxRotation: number;
+}
+
+const CROP_STATE_PREFIX = 'PASS_CROP_STATE_V1_';
+
+// djb2 字符串哈希，用于为图片 URL 组合生成稳定且简短的存储 key
+function hashString(str: string): string {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(36);
+}
+
+function getCropStateKey(frontPhotoUrl: string, cutoutPhotoUrl: string): string {
+  return CROP_STATE_PREFIX + hashString(frontPhotoUrl + '||' + cutoutPhotoUrl);
+}
+
+function loadCropState(frontPhotoUrl: string, cutoutPhotoUrl: string): CropState | null {
+  try {
+    if (!frontPhotoUrl && !cutoutPhotoUrl) return null;
+    const raw = localStorage.getItem(getCropStateKey(frontPhotoUrl, cutoutPhotoUrl));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CropState;
+    // 简单校验字段完整性
+    if (typeof parsed?.cutoutScale !== 'number' || typeof parsed?.cropBoxScale !== 'number') return null;
+    return parsed;
+  } catch (err) {
+    console.warn('读取裁剪记忆失败:', err);
+    return null;
+  }
+}
+
+function saveCropState(frontPhotoUrl: string, cutoutPhotoUrl: string, state: CropState) {
+  try {
+    if (!frontPhotoUrl && !cutoutPhotoUrl) return;
+    localStorage.setItem(getCropStateKey(frontPhotoUrl, cutoutPhotoUrl), JSON.stringify(state));
+  } catch (err) {
+    console.warn('保存裁剪记忆失败:', err);
+  }
+}
+
 export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   isOpen,
   onClose,
@@ -94,14 +142,18 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   };
 
   // 旋转框四个角点的画布坐标（局部 ±halfW / ±halfH）
+  // 按环绕顺序：右上 → 右下 → 左下 → 左上，保证 Path2D 连线不交叉
   const getRotatedCorners = (cropBox: ReturnType<typeof getCropBoxRect>) => {
     const halfW = cropBox.w / 2;
     const halfH = cropBox.h / 2;
     const corners: { x: number; y: number }[] = [];
-    for (const sx of [1, -1]) {
-      for (const sy of [1, -1]) {
-        corners.push(toCanvas(cropBox, sx * halfW, sy * halfH));
-      }
+    for (const [sx, sy] of [
+      [1, 1],
+      [1, -1],
+      [-1, -1],
+      [-1, 1],
+    ]) {
+      corners.push(toCanvas(cropBox, sx * halfW, sy * halfH));
     }
     return corners;
   };
@@ -118,14 +170,26 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     return path;
   };
 
-  // Load images when opened & reset step
+  // Load images when opened & reset step (恢复该图片上次的对齐/裁切记忆)
   useEffect(() => {
     if (!isOpen) return;
     setStep('align');
-    setCutoutPos({ x: 0, y: 0 });
-    setCutoutScale(1.0);
     setIsBlinking(true);
-    setCropBoxRotation(0);
+
+    const saved = loadCropState(frontPhotoUrl, cutoutPhotoUrl);
+    if (saved) {
+      setCutoutPos(saved.cutoutPos);
+      setCutoutScale(saved.cutoutScale);
+      setCropBoxScale(saved.cropBoxScale);
+      setCropBoxPos(saved.cropBoxPos);
+      setCropBoxRotation(saved.cropBoxRotation);
+    } else {
+      setCutoutPos({ x: 0, y: 0 });
+      setCutoutScale(1.0);
+      setCropBoxScale(1.0);
+      setCropBoxPos({ x: 0, y: 0 });
+      setCropBoxRotation(0);
+    }
 
     if (frontPhotoUrl) {
       const img = new Image();
@@ -147,6 +211,18 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       cutoutImgRef.current = null;
     }
   }, [isOpen, frontPhotoUrl, cutoutPhotoUrl]);
+
+  // 打开期间自动保存裁剪配置，保证重新进入同一图片时恢复上次状态
+  useEffect(() => {
+    if (!isOpen) return;
+    saveCropState(frontPhotoUrl, cutoutPhotoUrl, {
+      cutoutPos,
+      cutoutScale,
+      cropBoxScale,
+      cropBoxPos,
+      cropBoxRotation,
+    });
+  }, [isOpen, frontPhotoUrl, cutoutPhotoUrl, cutoutPos, cutoutScale, cropBoxScale, cropBoxPos, cropBoxRotation]);
 
   // Blinking Timer (500ms toggle in Step 1)
   useEffect(() => {
@@ -257,11 +333,12 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       }
 
       // 顶部旋转手柄：连接线 + 圆形手柄
+      const topMid = toCanvas(cropBox, 0, -cropBox.h / 2);
       const rotHandle = toCanvas(cropBox, 0, -cropBox.h / 2 - 26);
       ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(cropBox.cx, cropBox.cy - cropBox.h / 2);
+      ctx.moveTo(topMid.x, topMid.y);
       ctx.lineTo(rotHandle.x, rotHandle.y);
       ctx.stroke();
       ctx.fillStyle = '#fbbf24';
@@ -271,19 +348,6 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       ctx.strokeStyle = '#0f172a';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-
-      // 旋转角度显示（接近 0 时显示 0°）
-      const deg = Math.round((cropBoxRotation * 180) / Math.PI);
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(
-        `通行证卡面裁切框 (590:1180)  旋转 ${((deg % 360) + 360) % 360}°`,
-        cropBox.x + 8,
-        cropBox.y + 18
-      );
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.9)';
-      ctx.font = '10px sans-serif';
-      ctx.fillText('拖动四角调整大小 · 拖动顶部圆柄旋转 · 框内拖动移动', cropBox.x + 8, cropBox.y + 32);
     } else {
       // In Step 1, render subtle preview outline for reference
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
@@ -291,9 +355,6 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       ctx.setLineDash([4, 4]);
       ctx.stroke(buildRotatedPath(cropBox));
       ctx.setLineDash([]);
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
-      ctx.font = '10px sans-serif';
-      ctx.fillText('裁切框预览位置', cropBox.x + 6, cropBox.y + 14);
     }
 
     ctx.restore();
@@ -391,11 +452,12 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
       const newScale = Math.min(2.0, Math.max(0.4, Math.max(Math.abs(lx) / 125, Math.abs(ly) / 250)));
       setCropBoxScale(newScale);
     } else if (dragTarget === 'rotate') {
-      // 拖动旋转手柄：绕框中心旋转
+      // 拖动旋转手柄：旋转手柄位于框局部 -y 方向（顶部），
+      // 其画布方向角 = rotation - 90°，因此需补偿 +90° 使圆柄/中心/鼠标共线
       const ws = canvasRef.current;
       const cropBox = getCropBoxRect(ws.width, ws.height);
       const angle = Math.atan2(moveY - cropBox.cy, moveX - cropBox.cx);
-      setCropBoxRotation(angle);
+      setCropBoxRotation(angle + Math.PI / 2);
     }
   };
 
@@ -510,7 +572,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
           <div className="flex items-center gap-2">
             <Move className="w-5 h-5 text-blue-400" />
-            <h3 className="text-base font-bold">图像预处理与裁切 (Photo Alignment & Crop)</h3>
+            <h3 className="text-base font-bold">图像预处理与裁切</h3>
           </div>
 
           {/* Stepper Tabs */}
@@ -546,41 +608,6 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Dynamic Tip & Toolbar Header per Step */}
-        {step === 'align' ? (
-          <div className="flex flex-wrap items-center justify-between bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-xs gap-2">
-            <span className="text-slate-300 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
-              <strong>步骤一：原图与抠图对齐。</strong>按住鼠标拖动抠图，调整缩放使其与底图吻合。
-            </span>
-            <button
-              onClick={() => setIsBlinking((b) => !b)}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg font-bold transition ${
-                isBlinking
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse'
-                  : 'bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              {isBlinking ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-              {isBlinking ? '闪烁观察中' : '闪烁已暂停'}
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-xs gap-2">
-            <span className="text-slate-300 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />
-              <strong>步骤二：框选通行证卡面区域。</strong>拖动四角调整大小（保持 1:2），拖动顶部圆柄旋转，拖动框内移动。超出区域透明填充。
-            </span>
-            <button
-              onClick={handleResetCropBox}
-              className="flex items-center gap-1 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition text-xs"
-            >
-              <RefreshCw className="w-3 h-3 text-slate-400" />
-              重置框选
-            </button>
-          </div>
-        )}
 
         {/* Workspace Canvas */}
         <div className="flex justify-center overflow-hidden rounded-xl bg-slate-950 p-3 border border-slate-800 select-none">
@@ -644,6 +671,19 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
               重置位移
+            </button>
+
+            {/* Blinking toggle button */}
+            <button
+              onClick={() => setIsBlinking((b) => !b)}
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl font-medium transition ${
+                isBlinking
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              {isBlinking ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              {isBlinking ? '闪烁观察中' : '闪烁已暂停'}
             </button>
           </div>
         ) : (
