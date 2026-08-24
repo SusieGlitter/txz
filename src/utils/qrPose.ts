@@ -233,13 +233,16 @@ function refinePosePnP(
  * @param imageHeight 视频帧原始高度（像素）
  * @param qrSizeCm    二维码物理边长（cm）
  * @param fovYDeg     相机垂直视场角（度）固定假设值
+ * @param initPose    上一帧的位姿（可选）。提供时 PnP 以其为迭代初值，
+ *                    保证连续帧收敛到同一分支，避免镜像歧义导致的位姿跳变。
  */
 export function estimateQRPose(
   corners: Array<{ x: number; y: number }>,
   imageWidth: number,
   imageHeight: number,
   qrSizeCm: number,
-  fovYDeg: number
+  fovYDeg: number,
+  initPose?: { R: THREE.Matrix3; t: THREE.Vector3 }
 ): QRPose | null {
   if (!corners || corners.length !== 4) return null;
   const s = qrSizeCm;
@@ -305,13 +308,15 @@ export function estimateQRPose(
   const toCameraDir = t.clone().negate().normalize();
   if (e3.dot(toCameraDir) < 0) e3.multiplyScalar(-1);
 
-  // PnP 迭代优化：大角度/角点噪声下，DLT 分解位姿漂移明显，用高斯-牛顿最小化重投影误差
-  const R0 = new THREE.Matrix3().set(
+  // PnP 迭代优化：大角度/角点噪声下，DLT 分解位姿漂移明显，用高斯-牛顿最小化重投影误差。
+  // 若提供了上一帧位姿，以其为初值（帧间跟踪），保证连续帧收敛到同一分支、避免镜像跳变。
+  const R0 = initPose?.R ?? new THREE.Matrix3().set(
     e1.x, e2.x, e3.x,
     e1.y, e2.y, e3.y,
     e1.z, e2.z, e3.z
   );
-  const refined = refinePosePnP(R0, t, src, dst, f, cx, cy);
+  const t0 = initPose?.t ?? t;
+  const refined = refinePosePnP(R0, t0, src, dst, f, cx, cy);
   if (refined) {
     t.copy(refined.t);
     // 从优化后的旋转矩阵重新取基向量（列主序）
