@@ -147,6 +147,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   const smoothCornersRef = useRef<Array<{ x: number; y: number }> | null>(null);
   const lastPoseQuatRef = useRef<THREE.Quaternion | null>(null);
   const lastFRef = useRef<THREE.Vector3 | null>(null);
+  const focalPxRef = useRef<number>(0); // 自动标定的相机焦距（px），0 = 未标定（使用默认 fov）
 
   // 摄像头 / 检测
   const streamRef = useRef<MediaStream | null>(null);
@@ -327,19 +328,24 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
       const updateFrame = (pose: QRPose) => {
         const f = frameRef.current;
         if (!f) return;
-        const half = qrSizeCmRef.current / 100 / 2; // cm -> 米（1 单位 = 1 米）
-        const cut = Math.max(0.003, half * 0.35); // 右下角切角长度
+        // 场景单位 = cm（模型 scale = qrSizeCm/CARD_W3D，1 单位 = 1cm），
+        // 故半边长直接用 qrSizeCm/2
+        const half = qrSizeCmRef.current / 2;
+        const cut = Math.max(0.02, half * 0.35); // 右下角切角长度
+        // pose 局部 +Y（e2）= 二维码平面内"向上"方向（内容正读方向），
+        // 因此 sy=+1 是上侧（TL/TR），sy=-1 是下侧（BR/BL）。
         const e1 = new THREE.Vector3(1, 0, 0).applyQuaternion(pose.quaternion);
         const e2 = new THREE.Vector3(0, 1, 0).applyQuaternion(pose.quaternion);
         const c = pose.position;
         const corner = (sx: number, sy: number) =>
           c.clone().addScaledVector(e1, sx * half).addScaledVector(e2, sy * half);
-        const TL = corner(-1, -1);
-        const TR = corner(1, -1);
-        const BR = corner(1, 1);
-        const BL = corner(-1, 1);
-        const A = BR.clone().addScaledVector(e1, -cut); // 上边距右下角 cut 处
-        const B = BR.clone().addScaledVector(e2, -cut); // 右边距右下角 cut 处
+        const TL = corner(-1, 1);
+        const TR = corner(1, 1);
+        const BR = corner(1, -1);
+        const BL = corner(-1, -1);
+        // 切角在右下角 BR：沿 BR 的两条邻边（-e1 向左、+e2 向上）各取 cut
+        const A = BR.clone().addScaledVector(e1, -cut);
+        const B = BR.clone().addScaledVector(e2, cut);
         const attr = f.geometry.getAttribute('position') as THREE.BufferAttribute;
         const arr = [
           TL.x, TL.y, TL.z, TR.x, TR.y, TR.z,
@@ -459,6 +465,17 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         if (spin && autoRotateRef.current && !draggingRef.current) {
           spin.rotation.y += ROTATE_SPEED;
         }
+        // 相机 fov 跟随自动标定的焦距，使 3D 透视与真实相机一致（框/模型贴合二维码）
+        if (cameraRef.current && focalPxRef.current > 0) {
+          const vh = videoRef.current?.videoHeight || 0;
+          if (vh > 0) {
+            const fovDeg = (2 * Math.atan(vh / 2 / focalPxRef.current) * 180) / Math.PI;
+            if (Math.abs(cameraRef.current.fov - fovDeg) > 0.05) {
+              cameraRef.current.fov = fovDeg;
+              cameraRef.current.updateProjectionMatrix();
+            }
+          }
+        }
         if (rendererRef.current && sceneRef.current && cameraRef.current) {
           rendererRef.current.render(sceneRef.current, cameraRef.current);
         }
@@ -472,8 +489,10 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         if (!vw || !vh) return { kind: 'none' };
         const target = qrText.trim();
 
-        // 角点平滑 + 方向消歧，得到稳定位姿。
-        // updateRef=true 时写入方向参考（仅 jsQR 路径，因其角点顺序已归一化、方向确定）
+        // 角点平滑 + 位姿求解。
+        // updateRef=true（jsQR 主路径）：jsQR 角点顺序已按二维码方向归一化，
+        //   直接解算即可，无需 4 向消歧（消歧反而可能因噪声选错方向）；
+        // updateRef=false（原生路径）：角点顺序不保证，用 4 向消歧。
         const refinePose = (
           cornersRaw: Array<{ x: number; y: number }>,
           updateRef: boolean
@@ -485,15 +504,31 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           }
           const sm = smoothCorners(cornersRaw, smoothCornersRef.current);
           smoothCornersRef.current = sm;
-          const pose = disambiguatePose(
-            sm,
-            vw,
-            vh,
-            qrSizeCmRef.current,
-            CAMERA_FOV,
-            lastPoseQuatRef.current
-          );
-          if (pose && updateRef) lastPoseQuatRef.current = pose.quaternion.clone();
+          let pose: QRPose | null;
+          if (updateRef) {
+            // jsQR 主路径：自动标定焦距（利用二维码正方形正交约束），并对焦距做跨帧 EMA
+            const outFocal = { value: 0 };
+            pose = estimateQRPose(sm, vw, vh, qrSizeCmRef.current, CAMERA_FOV, {
+              focalPx: focalPxRef.current,
+              outFocal,
+            });
+            if (outFocal.value > 0) {
+              focalPxRef.current =
+                focalPxRef.current > 0
+                  ? focalPxRef.current + (outFocal.value - focalPxRef.current) * 0.3
+                  : outFocal.value;
+            }
+            if (pose) lastPoseQuatRef.current = pose.quaternion.clone();
+          } else {
+            pose = disambiguatePose(
+              sm,
+              vw,
+              vh,
+              qrSizeCmRef.current,
+              CAMERA_FOV,
+              lastPoseQuatRef.current
+            );
+          }
           return pose;
         };
 

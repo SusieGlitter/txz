@@ -162,7 +162,11 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   useEffect(() => {
     let cancelled = false;
     if (!qrText) return;
-    qrToDataURL(qrText, { width: 512, margin: 2, errorCorrectionLevel: 'M' })
+    // version 2（25 模块）含 alignment pattern：透视倾斜下 jsQR/ZXing 才能稳定识别。
+    // version 1 无 alignment pattern，摄像头倾斜扫描时解码会失败。若内容过长无法用
+    // version 2 编码，回退到自动版本（长内容自动版本本身就有 alignment pattern）。
+    qrToDataURL(qrText, { width: 512, margin: 2, errorCorrectionLevel: 'M', version: 2 })
+      .catch(() => qrToDataURL(qrText, { width: 512, margin: 2, errorCorrectionLevel: 'M' }))
       .then((url) => {
         if (!cancelled) setQrDataUrl(url);
       })
