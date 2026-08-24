@@ -2,9 +2,12 @@ import * as THREE from 'three';
 
 export interface QRPose {
   valid: boolean;
-  /** 二维码中心在相机坐标系中的位置（单位与 qrSizeCm 一致，cm） */
+  /**
+   * 二维码中心在 Three.js 场景/相机坐标系中的位置（相机位于原点、朝向 -Z、
+   * +Y 向上，单位与 qrSizeCm 一致，cm）。即与渲染相机的坐标系完全一致。
+   */
   position: THREE.Vector3;
-  /** 二维码平面的旋转（相机坐标系），平面局部 +Z = 平面法线（朝向相机） */
+  /** 二维码平面的旋转（场景坐标系），平面局部 +Z = 平面法线（朝向相机） */
   quaternion: THREE.Quaternion;
   /** 二维码平面法线（指向相机，即远离桌面的方向） */
   normal: THREE.Vector3;
@@ -113,10 +116,17 @@ export function estimateQRPose(
     h[8],
   ];
 
-  // 取列向量
+  // 取列向量（此时位于“计算机视觉相机坐标”：图像 y 向下、+Z 向前）
   let r1 = new THREE.Vector3(g[0], g[3], g[6]);
   let r2 = new THREE.Vector3(g[1], g[4], g[7]);
   let t = new THREE.Vector3(g[2], g[5], g[8]);
+
+  // CV 相机坐标 -> Three.js 场景坐标（+Y 向上、-Z 向前）：
+  // 图像 y 向下对应 Three.js -Y；相机前方 +Z 对应 Three.js -Z。
+  const flipCVtoThree = (v: THREE.Vector3) => new THREE.Vector3(v.x, -v.y, -v.z);
+  r1 = flipCVtoThree(r1);
+  r2 = flipCVtoThree(r2);
+  t = flipCVtoThree(t);
 
   const scale = (r1.length() + r2.length()) / 2;
   if (scale < 1e-9) return null;
@@ -124,8 +134,8 @@ export function estimateQRPose(
   r2.divideScalar(scale);
   t.divideScalar(scale);
 
-  // 二维码应在相机前方：t.z > 0
-  if (t.z < 0) {
+  // 二维码应在相机前方：Three.js 中相机朝向 -Z，故 t.z < 0
+  if (t.z > 0) {
     r1.multiplyScalar(-1);
     r2.multiplyScalar(-1);
     t.multiplyScalar(-1);
@@ -135,8 +145,10 @@ export function estimateQRPose(
   const e1 = r1.clone().normalize();
   const e2 = r2.clone().sub(e1.clone().multiplyScalar(r2.dot(e1))).normalize();
   const e3 = new THREE.Vector3().crossVectors(e1, e2).normalize();
-  // 法线应指向相机（+z 分量 > 0）
-  if (e3.z < 0) e3.multiplyScalar(-1);
+  // 法线应朝向相机半球（二维码正面朝向相机）：
+  // 不能用 e3.z>0 判定——二维码平放桌面时法线朝上(z≈0)，按 z 判定会误翻成朝下。
+  const toCameraDir = t.clone().negate().normalize();
+  if (e3.dot(toCameraDir) < 0) e3.multiplyScalar(-1);
 
   return {
     valid: true,

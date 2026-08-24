@@ -37,6 +37,7 @@ const DETECT_INTERVAL = 150; // 检测间隔 ms
 const JSQR_MAX_SCAN = 960; // jsQR 扫描的最大宽度（更高分辨率有助于识别小二维码）
 const ROTATE_SPEED = 0.006; // 自动旋转角速度（与主预览一致）
 const DEFAULT_PITCH = -0.35; // 初始前倾角（rad），让卡片面在正对时也能看到
+const SMOOTH = 0.2; // 位置/角度/大小平滑系数（每帧向目标逼近的比例，越小越平稳）
 
 type DetectorKind = 'native' | 'jsqr';
 type StatusKind = 'starting' | 'searching' | 'mismatch' | 'locked' | 'error';
@@ -67,9 +68,10 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   const spinGroupRef = useRef<THREE.Group | null>(null); // 自动/拖动旋转
   const modelRef = useRef<THREE.Group | null>(null);
   const rafRef = useRef<number | null>(null);
-  const targetPoseRef = useRef<{ position: THREE.Vector3; quaternion: THREE.Quaternion }>({
+  const targetPoseRef = useRef<{ position: THREE.Vector3; quaternion: THREE.Quaternion; scale: number }>({
     position: new THREE.Vector3(0, 0, 0),
     quaternion: new THREE.Quaternion(),
+    scale: 0,
   });
 
   // 摄像头 / 检测
@@ -229,10 +231,8 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
       const applyPose = (pose: QRPose) => {
         const model = modelRef.current;
         if (!model) return;
-        const scale = qrSizeCmRef.current / CARD_W3D;
-        model.scale.setScalar(scale);
-        // 模型局部原点在卡面中心，抬高半卡高使底边落在锚点原点（二维码中心）
-        model.position.set(0, (CARD_H3D / 2) * scale, 0);
+        // 只记录目标值，位置/角度/大小统一在渲染循环里平滑逼近
+        targetPoseRef.current.scale = qrSizeCmRef.current / CARD_W3D;
 
         const up = pose.normal.clone();
         // 卡片朝向 = 相机方向投影到二维码平面；退化时使用二维码自身局部 +Y
@@ -305,13 +305,23 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         canvas.removeEventListener('pointercancel', onPointerUp);
       };
 
-      // 渲染循环：锚点平滑跟随 + 自动旋转
+      // 渲染循环：锚点平滑跟随 + 模型大小平滑 + 自动旋转
       const tick = () => {
         rafRef.current = requestAnimationFrame(tick);
         const anchor = anchorGroupRef.current;
         if (anchor) {
-          anchor.position.lerp(targetPoseRef.current.position, 0.3);
-          anchor.quaternion.slerp(targetPoseRef.current.quaternion, 0.3);
+          anchor.position.lerp(targetPoseRef.current.position, SMOOTH);
+          anchor.quaternion.slerp(targetPoseRef.current.quaternion, SMOOTH);
+        }
+        const model = modelRef.current;
+        if (model && model.visible) {
+          // 大小平滑逼近目标
+          const targetScale = targetPoseRef.current.scale;
+          const curScale = model.scale.x;
+          const ns = curScale + (targetScale - curScale) * SMOOTH;
+          model.scale.setScalar(ns);
+          // 模型局部原点在卡面中心，抬高半卡高使底边落在锚点原点（二维码中心）
+          model.position.set(0, (CARD_H3D / 2) * ns, 0);
         }
         const spin = spinGroupRef.current;
         if (spin && autoRotateRef.current && !draggingRef.current) {
@@ -334,6 +344,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         if (detector) {
           try {
             const codes = await detector.detect(video);
+            let sawOther = false;
             for (const c of codes) {
               if (!c.cornerPoints || c.cornerPoints.length !== 4) continue;
               const matches = target === '' || c.rawValue.trim() === target;
@@ -346,9 +357,11 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
                   CAMERA_FOV
                 );
                 if (pose) return { kind: 'match', pose };
+              } else {
+                sawOther = true;
               }
-              return { kind: 'other' };
             }
+            if (sawOther) return { kind: 'other' };
           } catch (err) {
             // 原生检测异常时忽略，下一次再试
           }
@@ -399,7 +412,13 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           applyPose(result.pose);
           setStatus('locked');
         } else if (result.kind === 'other') {
-          setStatus((s) => (s === 'locked' ? 'locked' : 'mismatch'));
+          setStatus((s) => {
+            // 目标二维码已丢失（误扫到其他二维码）：同样给 1500ms 宽限后退出 locked
+            if (s === 'locked') {
+              return Date.now() - lastDetectRef.current < 1500 ? 'locked' : 'mismatch';
+            }
+            return 'mismatch';
+          });
         } else {
           setStatus((s) => {
             if (s === 'locked') {
@@ -426,6 +445,11 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
     return disposeAll;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 扫不到二维码（退出 locked 状态）时隐藏模型，避免悬浮在画面上
+  useEffect(() => {
+    if (modelRef.current) modelRef.current.visible = status === 'locked';
+  }, [status]);
 
   // 全屏进入/退出
   useEffect(() => {
@@ -487,10 +511,10 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           )}
           {status === 'error' && <VideoOff className="w-3.5 h-3.5 text-red-400" />}
           <span className="font-medium">
-            {status === 'starting' && '正在启动摄像头...'}
-            {status === 'searching' && '正在寻找二维码…'}
-            {status === 'mismatch' && '检测到其他二维码，请对准生成的二维码'}
-            {status === 'locked' && '已识别二维码，模型已放置于二维码上方'}
+            {status === 'starting' && '正在启动摄像头'}
+            {status === 'searching' && '正在寻找二维码'}
+            {status === 'mismatch' && '检测到其他二维码'}
+            {status === 'locked' && '已识别到二维码'}
             {status === 'error' && '摄像头启动失败'}
           </span>
           <span className="text-slate-500 ml-2">
