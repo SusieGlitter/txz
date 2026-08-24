@@ -16,7 +16,7 @@ import {
   QrCode,
   Camera,
 } from 'lucide-react';
-import { toDataURL as qrToDataURL } from 'qrcode';
+import { generateArMarkerDataURL, AR_MARKER_VALUE } from '../utils/arMarker';
 import { ARPreviewOverlay } from './ARPreviewOverlay';
 import { PassCardInfo, E1Options, DEFAULT_LAYER_VISIBILITY } from '../types';
 import {
@@ -67,13 +67,10 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const [isRecordingGif, setIsRecordingGif] = useState<boolean>(false);
   const [sceneReady, setSceneReady] = useState<boolean>(false);
 
-  // 二维码生成与 AR 摄像头预览
-  const [qrSizeCm, setQrSizeCm] = useState<number>(5); // 二维码物理边长（cm），AR 识别时作为模型缩放基准
+  // AR 标记生成与摄像头预览
+  const [qrSizeCm, setQrSizeCm] = useState<number>(5); // AR 标记物理边长（cm），AR 识别时作为模型缩放基准
   const [arOpen, setArOpen] = useState<boolean>(false);
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
-
-  // 二维码内容与通行证条形码内容保持一致
-  const qrText = info.barcode_text || info.english_name || info.id || 'ARKNIGHTS - R001';
+  const [markerDataUrl, setMarkerDataUrl] = useState<string>('');
 
   // 刀线形状（含孔洞）——由刀线 mask 提取，用于构建真实扫出体积的亚克力几何体
   const [diecutShape, setDiecutShape] = useState<THREE.Shape | null>(null);
@@ -158,25 +155,21 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // 生成二维码（内容 = 条形码内容）
+  // 生成 AR 标记（ARToolKit 3x3_PARITY65 barcode，所有通行证共用同一个标记图）
   useEffect(() => {
     let cancelled = false;
-    if (!qrText) return;
-    qrToDataURL(qrText, { width: 512, margin: 2, errorCorrectionLevel: 'M' })
-      .then((url) => {
-        if (!cancelled) setQrDataUrl(url);
-      })
-      .catch((err) => console.error('二维码生成失败:', err));
+    const url = generateArMarkerDataURL(AR_MARKER_VALUE, 512);
+    if (!cancelled) setMarkerDataUrl(url);
     return () => {
       cancelled = true;
     };
-  }, [qrText]);
+  }, []);
 
-  const downloadQr = () => {
-    if (!qrDataUrl) return;
+  const downloadMarker = () => {
+    if (!markerDataUrl) return;
     const a = document.createElement('a');
-    a.href = qrDataUrl;
-    a.download = `通行证二维码_${info.english_name || info.chinese_name || 'card'}.png`;
+    a.href = markerDataUrl;
+    a.download = `通行证AR标记_${info.english_name || info.chinese_name || 'card'}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -976,8 +969,8 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
         <div className="bg-slate-900/60 border border-slate-800 p-3 rounded-xl">
           <div className="flex items-start gap-3">
             <div className="shrink-0 bg-white p-1.5 rounded-lg shadow-inner">
-              {qrDataUrl ? (
-                <img src={qrDataUrl} alt="通行证二维码" className="w-24 h-24" />
+              {markerDataUrl ? (
+                <img src={markerDataUrl} alt="通行证 AR 标记" className="w-24 h-24" />
               ) : (
                 <div className="w-24 h-24 flex items-center justify-center text-slate-300">
                   <QrCode className="w-8 h-8" />
@@ -988,19 +981,19 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-1.5 text-slate-200 font-semibold">
                   <QrCode className="w-4 h-4 text-blue-400" />
-                  <span>生成二维码</span>
+                  <span>生成 AR 标记</span>
                 </div>
                 <button
-                  onClick={downloadQr}
-                  disabled={!qrDataUrl}
+                  onClick={downloadMarker}
+                  disabled={!markerDataUrl}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/25 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  title="下载二维码 PNG（内容与条形码一致）"
+                  title="下载 AR 标记 PNG（打印后供摄像头识别）"
                 >
-                  下载二维码 PNG
+                  下载 AR 标记 PNG
                 </button>
               </div>
-              <div className="text-[10px] text-slate-500 truncate" title={qrText}>
-                内容（与条形码一致）：{qrText}
+              <div className="text-[10px] text-slate-500 truncate">
+                ARToolKit 3x3 标记（ARToolKit barcode，所有通行证共用）；打印后扫描即可把 3D 模型叠加到标记上方
               </div>
               <div className="flex items-center gap-2 text-[11px] text-slate-400">
                 <span className="shrink-0">打印尺寸</span>
@@ -1021,11 +1014,10 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
         </div>
       </div>
 
-      {/* AR 摄像头全屏预览：扫描二维码后把模型叠加到二维码上方 */}
+      {/* AR 摄像头全屏预览：扫描 AR 标记后把模型叠加到标记上方 */}
       {arOpen && (
         <ARPreviewOverlay
           passGroup={passGroupRef.current}
-          qrText={qrText}
           qrSizeCm={qrSizeCm}
           autoRotate={autoRotate}
           onClose={() => setArOpen(false)}
