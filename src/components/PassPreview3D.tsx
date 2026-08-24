@@ -345,6 +345,8 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
 
         // --- D. Draw Back Print Layer ---
         // Outer back print, which is double-sided graphic background with character silhouette
+        // 背面印刷层必须透明背景：亚克力无印刷处透明，从背面看可透出中间层立绘，
+        // 与正面（frontTex background:false）的透明观感保持一致。
         backCtx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
         await renderBackCard(
           backCtx,
@@ -354,6 +356,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
           img1Obj,   // Pass the front photo if cutout is not available
           {
             ...DEFAULT_LAYER_VISIBILITY,
+            background: false, // Transparent back print layer (无印刷处透明)
             characterPhoto: true, // Keep character silhouette enabled on back face
           },
           true // Apply diecut for 3D preview
