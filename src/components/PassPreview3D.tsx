@@ -13,7 +13,11 @@ import {
   HelpCircle,
   RefreshCw,
   Video,
+  QrCode,
+  Camera,
 } from 'lucide-react';
+import { toDataURL as qrToDataURL } from 'qrcode';
+import { ARPreviewOverlay } from './ARPreviewOverlay';
 import { PassCardInfo, E1Options, DEFAULT_LAYER_VISIBILITY } from '../types';
 import {
   renderFrontCard,
@@ -61,6 +65,15 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const [isUpdatingTextures, setIsUpdatingTextures] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isRecordingGif, setIsRecordingGif] = useState<boolean>(false);
+  const [sceneReady, setSceneReady] = useState<boolean>(false);
+
+  // 二维码生成与 AR 摄像头预览
+  const [qrSizeCm, setQrSizeCm] = useState<number>(5); // 二维码物理边长（cm），AR 识别时作为模型缩放基准
+  const [arOpen, setArOpen] = useState<boolean>(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+
+  // 二维码内容与通行证条形码内容保持一致
+  const qrText = info.barcode_text || info.english_name || info.id || 'ARKNIGHTS - R001';
 
   // 刀线形状（含孔洞）——由刀线 mask 提取，用于构建真实扫出体积的亚克力几何体
   const [diecutShape, setDiecutShape] = useState<THREE.Shape | null>(null);
@@ -144,6 +157,30 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // 生成二维码（内容 = 条形码内容）
+  useEffect(() => {
+    let cancelled = false;
+    if (!qrText) return;
+    qrToDataURL(qrText, { width: 512, margin: 2, errorCorrectionLevel: 'M' })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch((err) => console.error('二维码生成失败:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [qrText]);
+
+  const downloadQr = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement('a');
+    a.href = qrDataUrl;
+    a.download = `通行证二维码_${info.english_name || info.chinese_name || 'card'}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
 
   // 1. Initial preload of PSD assets and fonts
   useEffect(() => {
@@ -431,6 +468,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     // G. Create Acrylic and Print Layers Group
     const passGroup = new THREE.Group();
     passGroupRef.current = passGroup;
+    setSceneReady(true);
     scene.add(passGroup);
 
     // Dimension scales: 10 * 5 * 0.47 cm.
@@ -766,6 +804,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       frostedBump.dispose();
 
       passGroupRef.current = null;
+      setSceneReady(false);
       recordGifRef.current = null;
     };
   }, [isPreloading, diecutShape, shapeFailed]);
@@ -864,6 +903,19 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
           >
             {isFullscreen ? <Maximize2 className="w-4 h-4 rotate-180" /> : <Maximize2 className="w-4 h-4" />}
           </button>
+          <button
+            onClick={() => setArOpen(true)}
+            disabled={!sceneReady}
+            className={`p-2 rounded-lg transition ${
+              sceneReady
+                ? 'text-slate-300 hover:text-white hover:bg-slate-800'
+                : 'text-slate-600 cursor-not-allowed'
+            }`}
+            title={sceneReady ? '开启摄像头（扫描二维码后模型将叠加到二维码上方）' : '模型初始化中，请稍候'}
+            aria-label="开启摄像头"
+          >
+            <Camera className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Quick Instructions Overlay */}
@@ -919,7 +971,66 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
             {autoRotate ? '暂停旋转' : '开始旋转'}
           </button>
         </div>
+
+        {/* Row 3: 生成二维码（内容 = 条形码内容，可下载；AR 摄像头识别后模型将叠加到二维码上方） */}
+        <div className="bg-slate-900/60 border border-slate-800 p-3 rounded-xl">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 bg-white p-1.5 rounded-lg shadow-inner">
+              {qrDataUrl ? (
+                <img src={qrDataUrl} alt="通行证二维码" className="w-24 h-24" />
+              ) : (
+                <div className="w-24 h-24 flex items-center justify-center text-slate-300">
+                  <QrCode className="w-8 h-8" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 text-slate-200 font-semibold">
+                  <QrCode className="w-4 h-4 text-blue-400" />
+                  <span>生成二维码</span>
+                </div>
+                <button
+                  onClick={downloadQr}
+                  disabled={!qrDataUrl}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/25 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  title="下载二维码 PNG（内容与条形码一致）"
+                >
+                  下载二维码 PNG
+                </button>
+              </div>
+              <div className="text-[10px] text-slate-500 truncate" title={qrText}>
+                内容（与条形码一致）：{qrText}
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <span className="shrink-0">打印尺寸</span>
+                <input
+                  type="range"
+                  min="3"
+                  max="15"
+                  step="0.5"
+                  value={qrSizeCm}
+                  onChange={(e) => setQrSizeCm(parseFloat(e.target.value))}
+                  className="flex-1 accent-blue-500 h-1"
+                />
+                <span className="font-mono text-blue-400 font-bold w-12 text-right">{qrSizeCm} cm</span>
+                <span className="text-slate-500 hidden md:inline">（AR 识别时的模型缩放基准，打印时按此尺寸）</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* AR 摄像头全屏预览：扫描二维码后把模型叠加到二维码上方 */}
+      {arOpen && (
+        <ARPreviewOverlay
+          passGroup={passGroupRef.current}
+          qrText={qrText}
+          qrSizeCm={qrSizeCm}
+          autoRotate={autoRotate}
+          onClose={() => setArOpen(false)}
+        />
+      )}
     </div>
   );
 };
