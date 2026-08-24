@@ -36,7 +36,7 @@ const CAMERA_FOV = 45; // 固定垂直视场角假设（无需校准），位姿
 const DETECT_INTERVAL = 150; // 检测间隔 ms
 const JSQR_MAX_SCAN = 960; // jsQR 扫描的最大宽度（更高分辨率有助于识别小二维码）
 const ROTATE_SPEED = 0.006; // 自动旋转角速度（与主预览一致）
-const SMOOTH = 0.12; // 位置/角度/大小平滑系数（每帧向目标逼近的比例，越小越平稳）
+const SMOOTH = 0.2; // 位置/角度/大小平滑系数（每帧向目标逼近的比例，越小越平稳）
 
 type DetectorKind = 'native' | 'jsqr';
 type StatusKind = 'starting' | 'searching' | 'mismatch' | 'locked' | 'error';
@@ -53,7 +53,7 @@ const CORNER_PERMS = [
 
 /**
  * 角点指数平滑（减少 jsQR/原生检测的帧间抖动）。
- * 仅当二维码像素尺寸突变剧烈（>75%，视为重扫/跳变）才重置平滑器。
+ * 若二维码像素尺寸突变（>50%，视为跳变/重扫），直接重置平滑器。
  */
 function smoothCorners(
   raw: Array<{ x: number; y: number }>,
@@ -64,10 +64,10 @@ function smoothCorners(
     Math.hypot(c[2].x - c[0].x, c[2].y - c[0].y);
   const d = diag(raw);
   const pd = diag(prev);
-  if (pd > 1e-6 && Math.abs(d - pd) / pd > 0.75) {
+  if (pd > 1e-6 && Math.abs(d - pd) / pd > 0.5) {
     return raw.map((c) => ({ x: c.x, y: c.y }));
   }
-  const alpha = 0.65; // 平滑系数（越大越贴近最新检测，越小越稳）
+  const alpha = 0.5; // 平滑系数（越大越贴近最新检测，越小越稳）
   return raw.map((c, i) => ({
     x: prev[i].x + (c.x - prev[i].x) * alpha,
     y: prev[i].y + (c.y - prev[i].y) * alpha,
@@ -135,6 +135,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   const anchorGroupRef = useRef<THREE.Group | null>(null); // 贴合二维码的锚点组
   const spinGroupRef = useRef<THREE.Group | null>(null); // 自动/拖动旋转
   const modelRef = useRef<THREE.Group | null>(null);
+  const frameRef = useRef<THREE.LineSegments | null>(null); // 框住二维码的空间框（右下角切角指示方向）
   const rafRef = useRef<number | null>(null);
   const targetPoseRef = useRef<{ position: THREE.Vector3; quaternion: THREE.Quaternion; scale: number }>({
     position: new THREE.Vector3(0, 0, 0),
@@ -142,11 +143,10 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
     scale: 0,
   });
 
-  // 位姿稳定性：角点平滑、方向消歧参考、卡片朝向锁定（二维码本地坐标系）
+  // 位姿稳定性：角点平滑、方向消歧参考、正对时朝向继承
   const smoothCornersRef = useRef<Array<{ x: number; y: number }> | null>(null);
   const lastPoseQuatRef = useRef<THREE.Quaternion | null>(null);
-  const lockDirRef = useRef<THREE.Vector3 | null>(null);
-  const lastPoseRef = useRef<QRPose | null>(null); // 上一帧位姿（帧间 PnP 初值）
+  const lastFRef = useRef<THREE.Vector3 | null>(null);
 
   // 摄像头 / 检测
   const streamRef = useRef<MediaStream | null>(null);
@@ -187,6 +187,12 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+      }
+      if (frameRef.current) {
+        frameRef.current.geometry.dispose();
+        (frameRef.current.material as THREE.Material).dispose();
+        frameRef.current.removeFromParent();
+        frameRef.current = null;
       }
       if (rendererRef.current) {
         rendererRef.current.dispose();
@@ -303,6 +309,50 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         modelRef.current = model;
       }
 
+      // 二维码空间框：LineSegments 画二维码四边，右下角切角（斜线）指示方向
+      const frameGeo = new THREE.BufferGeometry();
+      frameGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(10 * 3), 3));
+      const frameMat = new THREE.LineBasicMaterial({
+        color: 0x22e0c0,
+        transparent: true,
+        opacity: 0.95,
+      });
+      const frame = new THREE.LineSegments(frameGeo, frameMat);
+      frame.visible = false;
+      frame.frustumCulled = false;
+      scene.add(frame);
+      frameRef.current = frame;
+
+      // 更新空间框：贴合二维码四边（尺寸 = qrSizeCm），右下角切角表示方向
+      const updateFrame = (pose: QRPose) => {
+        const f = frameRef.current;
+        if (!f) return;
+        const half = qrSizeCmRef.current / 100 / 2; // cm -> 米（1 单位 = 1 米）
+        const cut = Math.max(0.003, half * 0.35); // 右下角切角长度
+        const e1 = new THREE.Vector3(1, 0, 0).applyQuaternion(pose.quaternion);
+        const e2 = new THREE.Vector3(0, 1, 0).applyQuaternion(pose.quaternion);
+        const c = pose.position;
+        const corner = (sx: number, sy: number) =>
+          c.clone().addScaledVector(e1, sx * half).addScaledVector(e2, sy * half);
+        const TL = corner(-1, -1);
+        const TR = corner(1, -1);
+        const BR = corner(1, 1);
+        const BL = corner(-1, 1);
+        const A = BR.clone().addScaledVector(e1, -cut); // 上边距右下角 cut 处
+        const B = BR.clone().addScaledVector(e2, -cut); // 右边距右下角 cut 处
+        const attr = f.geometry.getAttribute('position') as THREE.BufferAttribute;
+        const arr = [
+          TL.x, TL.y, TL.z, TR.x, TR.y, TR.z,
+          TR.x, TR.y, TR.z, BR.x, BR.y, BR.z,
+          BR.x, BR.y, BR.z, BL.x, BL.y, BL.z,
+          BL.x, BL.y, BL.z, TL.x, TL.y, TL.z,
+          A.x, A.y, A.z, B.x, B.y, B.z,
+        ];
+        arr.forEach((v, i) => { attr.array[i] = v; });
+        attr.needsUpdate = true;
+        f.visible = true;
+      };
+
       // 按二维码位姿放置锚点：模型底边中点贴合二维码中心，卡片立于二维码平面
       const applyPose = (pose: QRPose) => {
         const model = modelRef.current;
@@ -310,30 +360,26 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         // 只记录目标值，位置/角度/大小统一在渲染循环里平滑逼近
         targetPoseRef.current.scale = qrSizeCmRef.current / CARD_W3D;
 
-        // 卡片中轴 = 二维码平面内的"垂直方向"（图形上下方向，pose 局部 +Y = e2）
+        // 卡片中轴/旋转轴 = 二维码平面内的"垂直方向"（图形上下方向，pose 局部 +Y = e2）
         const up = new THREE.Vector3(0, 1, 0).applyQuaternion(pose.quaternion);
-        // 卡片正面朝向：锁定在二维码本地坐标系（首次朝相机，之后相对二维码固定），
-        // 这样转动视角时能看到卡片的不同面（真实 3D 物体行为），而非总面向相机
-        let f: THREE.Vector3;
-        if (lockDirRef.current) {
-          f = lockDirRef.current.clone().applyQuaternion(pose.quaternion);
-        } else {
-          const toCam = pose.position.clone().negate();
-          let f0 = toCam.clone().sub(up.clone().multiplyScalar(toCam.dot(up)));
-          if (f0.lengthSq() < 1e-8) {
-            f0 = new THREE.Vector3(1, 0, 0).applyQuaternion(pose.quaternion);
-          }
-          f0.normalize();
-          // 转到二维码本地坐标系后固定
-          lockDirRef.current = f0.clone().applyQuaternion(pose.quaternion.clone().invert());
-          f = f0;
+        // 卡片正面朝向 = 相机方向投影到"垂直于 up"的平面
+        const toCam = pose.position.clone().negate();
+        let f = toCam.clone().sub(up.clone().multiplyScalar(toCam.dot(up)));
+        if (f.lengthSq() < 1e-8) {
+          // 相机方向恰沿 up 时朝向不唯一：继承上一帧朝向，或取平面内水平方向(e1)
+          f = lastFRef.current
+            ? lastFRef.current.clone()
+            : new THREE.Vector3(1, 0, 0).applyQuaternion(pose.quaternion);
         }
+        f.normalize();
+        lastFRef.current = f.clone();
         const right = new THREE.Vector3().crossVectors(up, f).normalize();
         const rot = new THREE.Matrix4().makeBasis(right, up, f);
 
         targetPoseRef.current.position.copy(pose.position);
         targetPoseRef.current.quaternion.setFromRotationMatrix(rot);
         model.visible = true;
+        updateFrame(pose);
       };
 
       resizeHandler = () => {
@@ -426,10 +472,8 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         if (!vw || !vh) return { kind: 'none' };
         const target = qrText.trim();
 
-        // 角点平滑 + 位姿求解。
-        // updateRef=true（jsQR 主路径）：角点顺序已归一化，无需 4 向消歧，
-        //   直接用上帧位姿作 PnP 初值做"帧间跟踪"，并做离群抑制，保证连续帧位姿稳定；
-        // updateRef=false（原生路径）：角点顺序不保证，用 4 向消歧，不写方向参考。
+        // 角点平滑 + 方向消歧，得到稳定位姿。
+        // updateRef=true 时写入方向参考（仅 jsQR 路径，因其角点顺序已归一化、方向确定）
         const refinePose = (
           cornersRaw: Array<{ x: number; y: number }>,
           updateRef: boolean
@@ -438,29 +482,9 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           if (Date.now() - lastDetectRef.current > 800) {
             lastPoseQuatRef.current = null;
             smoothCornersRef.current = null;
-            lockDirRef.current = null;
-            lastPoseRef.current = null;
           }
           const sm = smoothCorners(cornersRaw, smoothCornersRef.current);
           smoothCornersRef.current = sm;
-          if (updateRef) {
-            const last = lastPoseRef.current;
-            const initPose = last
-              ? {
-                  R: new THREE.Matrix3().setFromMatrix4(
-                    new THREE.Matrix4().makeRotationFromQuaternion(last.quaternion)
-                  ),
-                  t: last.position.clone(),
-                }
-              : undefined;
-            const pose = estimateQRPose(sm, vw, vh, qrSizeCmRef.current, CAMERA_FOV, initPose);
-            if (!pose) return null;
-            // 离群抑制：与上一帧位置跳变过大则丢弃本帧（模型保持上帧位姿）
-            if (last && pose.position.distanceTo(last.position) > 10) return null;
-            lastPoseRef.current = pose;
-            lastPoseQuatRef.current = pose.quaternion.clone();
-            return pose;
-          }
           const pose = disambiguatePose(
             sm,
             vw,
@@ -469,6 +493,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
             CAMERA_FOV,
             lastPoseQuatRef.current
           );
+          if (pose && updateRef) lastPoseQuatRef.current = pose.quaternion.clone();
           return pose;
         };
 
@@ -582,9 +607,11 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 扫不到二维码（退出 locked 状态）时隐藏模型，避免悬浮在画面上
+  // 扫不到二维码（退出 locked 状态）时隐藏模型与空间框，避免悬浮在画面上
   useEffect(() => {
-    if (modelRef.current) modelRef.current.visible = status === 'locked';
+    const visible = status === 'locked';
+    if (modelRef.current) modelRef.current.visible = visible;
+    if (frameRef.current) frameRef.current.visible = visible;
   }, [status]);
 
   // 全屏进入/退出
@@ -648,7 +675,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           {status === 'error' && <VideoOff className="w-3.5 h-3.5 text-red-400" />}
           <span className="font-medium">
             {status === 'starting' && '正在启动摄像头'}
-            {status === 'searching' && '正在识别二维码'}
+            {status === 'searching' && '正在寻找二维码'}
             {status === 'mismatch' && '检测到其他二维码'}
             {status === 'locked' && '已识别到二维码'}
             {status === 'error' && '摄像头启动失败'}

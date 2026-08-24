@@ -70,161 +70,6 @@ function solveHomographyDLT(
 }
 
 /**
- * 高斯-牛顿迭代优化位姿（PnP refine）：以 DLT 结果为初值，最小化 4 角点重投影误差。
- * 大角度、角点带噪声时，直接 DLT 分解的位姿会明显漂移，迭代优化可大幅改善。
- */
-
-/** 轴角 -> 旋转矩阵（Rodrigues） */
-function rodrigues(wx: number, wy: number, wz: number): THREE.Matrix3 {
-  const th = Math.sqrt(wx * wx + wy * wy + wz * wz);
-  if (th < 1e-12) return new THREE.Matrix3().identity();
-  const K = new THREE.Matrix3().set(0, -wz, wy, wz, 0, -wx, -wy, wx, 0);
-  const a = Math.sin(th) / th;
-  const b = (1 - Math.cos(th)) / (th * th);
-  const K2 = new THREE.Matrix3().multiplyMatrices(K, K);
-  // R = I + a*K + b*K2（逐元素，列主序）
-  const ek = K.elements;
-  const ek2 = K2.elements;
-  const r = new THREE.Matrix3().elements;
-  const Ie = [1, 0, 0, 0, 1, 0, 0, 0, 1];
-  for (let i = 0; i < 9; i++) r[i] = Ie[i] + a * ek[i] + b * ek2[i];
-  return new THREE.Matrix3().set(
-    r[0], r[3], r[6],
-    r[1], r[4], r[7],
-    r[2], r[5], r[8]
-  );
-}
-
-/** 旋转矩阵 -> 轴角 */
-function matrixToAxisAngle(R: THREE.Matrix3): { axis: THREE.Vector3; angle: number } {
-  const e = R.elements; // 列主序: [R00,R10,R20, R01,R11,R21, R02,R12,R22]
-  const trace = e[0] + e[4] + e[8];
-  const angle = Math.acos(Math.max(-1, Math.min(1, (trace - 1) / 2)));
-  if (angle < 1e-8) {
-    return { axis: new THREE.Vector3(0, 1, 0), angle: 0 };
-  }
-  const s = 2 * Math.sin(angle);
-  // w_x=(R21-R12)/s, w_y=(R02-R20)/s, w_z=(R10-R01)/s
-  const axis = new THREE.Vector3(
-    (e[5] - e[7]) / s,
-    (e[6] - e[2]) / s,
-    (e[1] - e[3]) / s
-  ).normalize();
-  return { axis, angle };
-}
-
-/** 由位姿参数 [wx,wy,wz,tx,ty,tz] 重投影 4 个角点，返回 8 维残差（u,v 各 4） */
-function computeReprojResidual(
-  params: Float64Array,
-  objectPoints: number[][],
-  imagePoints: number[][],
-  f: number,
-  cx: number,
-  cy: number
-): number[] {
-  const R = rodrigues(params[0], params[1], params[2]);
-  const e = R.elements;
-  const out: number[] = [];
-  for (let i = 0; i < objectPoints.length; i++) {
-    const wx = objectPoints[i][0];
-    const wy = objectPoints[i][1];
-    // R * (wx, wy, 0) 列主序: col0=x*[e0,e1,e2] + col1=y*[e3,e4,e5]
-    const camx = e[0] * wx + e[3] * wy + params[3];
-    const camy = e[1] * wx + e[4] * wy + params[4];
-    const camz = e[2] * wx + e[5] * wy + params[5];
-    if (camz > -1e-6) {
-      out.push(1e4, 1e4); // 相机后方，重罚
-      continue;
-    }
-    out.push(f * camx / -camz + cx - imagePoints[i][0]);
-    out.push(cy + (f * camy) / camz - imagePoints[i][1]);
-  }
-  return out;
-}
-
-/** 求解 6x6 线性方程组 A x = b */
-function solve6(A: number[][], b: number[]): number[] | null {
-  const M = A.map((row, i) => [...row, b[i]]);
-  for (let col = 0; col < 6; col++) {
-    let pivot = col;
-    for (let r = col + 1; r < 6; r++) {
-      if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
-    }
-    if (Math.abs(M[pivot][col]) < 1e-12) return null;
-    [M[col], M[pivot]] = [M[pivot], M[col]];
-    for (let r = 0; r < 6; r++) {
-      if (r === col) continue;
-      const fct = M[r][col] / M[col][col];
-      for (let c = col; c <= 6; c++) M[r][c] -= fct * M[col][c];
-    }
-  }
-  return M.map((row, i) => row[6] / row[i]);
-}
-
-/**
- * 以 DLT 得到的 R0/t0 为初值，用高斯-牛顿最小化重投影误差。
- * 返回优化后的 { R, t }；失败返回 null。
- */
-function refinePosePnP(
-  R0: THREE.Matrix3,
-  t0: THREE.Vector3,
-  objectPoints: number[][],
-  imagePoints: number[][],
-  f: number,
-  cx: number,
-  cy: number
-): { R: THREE.Matrix3; t: THREE.Vector3 } | null {
-  const { axis, angle } = matrixToAxisAngle(R0);
-  const params = new Float64Array(6);
-  params[0] = axis.x * angle;
-  params[1] = axis.y * angle;
-  params[2] = axis.z * angle;
-  params[3] = t0.x;
-  params[4] = t0.y;
-  params[5] = t0.z;
-
-  for (let iter = 0; iter < 15; iter++) {
-    const r = computeReprojResidual(params, objectPoints, imagePoints, f, cx, cy);
-    // 数值雅可比 6x8
-    const J: number[][] = [];
-    const eps = 1e-5;
-    for (let k = 0; k < 6; k++) {
-      const p2 = Float64Array.from(params);
-      p2[k] += eps;
-      const r2 = computeReprojResidual(p2, objectPoints, imagePoints, f, cx, cy);
-      const col: number[] = [];
-      for (let i = 0; i < r.length; i++) col.push((r2[i] - r[i]) / eps);
-      J.push(col);
-    }
-    // 法方程 (J^T J + λI) Δ = -J^T r
-    const JTJ: number[][] = Array.from({ length: 6 }, () => new Array<number>(6).fill(0));
-    const JTr = new Array<number>(6).fill(0);
-    for (let i = 0; i < 6; i++) {
-      for (let j = 0; j < 6; j++) {
-        let s = 0;
-        for (let m = 0; m < r.length; m++) s += J[i][m] * J[j][m];
-        JTJ[i][j] = s;
-      }
-      for (let m = 0; m < r.length; m++) JTr[i] += J[i][m] * r[m];
-    }
-    const lambda = 0.01;
-    for (let i = 0; i < 6; i++) JTJ[i][i] += lambda;
-    const delta = solve6(JTJ, JTr.map((v) => -v));
-    if (!delta) return null;
-    let maxStep = 0;
-    for (let i = 0; i < 6; i++) maxStep = Math.max(maxStep, Math.abs(delta[i]));
-    if (maxStep < 1e-8) break;
-    for (let i = 0; i < 6; i++) params[i] += delta[i];
-  }
-
-  const R = rodrigues(params[0], params[1], params[2]);
-  return {
-    R,
-    t: new THREE.Vector3(params[3], params[4], params[5]),
-  };
-}
-
-/**
  * 由图像中二维码的 4 个角点估算二维码平面在相机坐标系中的位姿。
  * 焦距使用固定假设（fovYDeg），无需用户校准。
  *
@@ -233,16 +78,13 @@ function refinePosePnP(
  * @param imageHeight 视频帧原始高度（像素）
  * @param qrSizeCm    二维码物理边长（cm）
  * @param fovYDeg     相机垂直视场角（度）固定假设值
- * @param initPose    上一帧的位姿（可选）。提供时 PnP 以其为迭代初值，
- *                    保证连续帧收敛到同一分支，避免镜像歧义导致的位姿跳变。
  */
 export function estimateQRPose(
   corners: Array<{ x: number; y: number }>,
   imageWidth: number,
   imageHeight: number,
   qrSizeCm: number,
-  fovYDeg: number,
-  initPose?: { R: THREE.Matrix3; t: THREE.Vector3 }
+  fovYDeg: number
 ): QRPose | null {
   if (!corners || corners.length !== 4) return null;
   const s = qrSizeCm;
@@ -307,35 +149,6 @@ export function estimateQRPose(
   // 不能用 e3.z>0 判定——二维码平放桌面时法线朝上(z≈0)，按 z 判定会误翻成朝下。
   const toCameraDir = t.clone().negate().normalize();
   if (e3.dot(toCameraDir) < 0) e3.multiplyScalar(-1);
-
-  // PnP 迭代优化：大角度/角点噪声下，DLT 分解位姿漂移明显，用高斯-牛顿最小化重投影误差。
-  // 若提供了上一帧位姿，以其为初值（帧间跟踪），保证连续帧收敛到同一分支、避免镜像跳变。
-  const R0 = initPose?.R ?? new THREE.Matrix3().set(
-    e1.x, e2.x, e3.x,
-    e1.y, e2.y, e3.y,
-    e1.z, e2.z, e3.z
-  );
-  const t0 = initPose?.t ?? t;
-  const refined = refinePosePnP(R0, t0, src, dst, f, cx, cy);
-  if (refined) {
-    t.copy(refined.t);
-    // 从优化后的旋转矩阵重新取基向量（列主序）
-    const re = refined.R.elements;
-    const re1 = new THREE.Vector3(re[0], re[1], re[2]);
-    const re2 = new THREE.Vector3(re[3], re[4], re[5]);
-    let re3 = new THREE.Vector3(re[6], re[7], re[8]);
-    // 优化后再次确保法线朝向相机
-    if (re3.dot(toCameraDir) < 0) re3.multiplyScalar(-1);
-    const out = {
-      valid: true,
-      position: t,
-      quaternion: new THREE.Quaternion().setFromRotationMatrix(
-        new THREE.Matrix4().makeBasis(re1, re2, re3)
-      ),
-      normal: re3,
-    };
-    return out;
-  }
 
   return {
     valid: true,
