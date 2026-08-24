@@ -142,10 +142,10 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
     scale: 0,
   });
 
-  // 位姿稳定性：角点平滑、方向消歧参考、正对时朝向继承
+  // 位姿稳定性：角点平滑、方向消歧参考、卡片朝向锁定（二维码本地坐标系）
   const smoothCornersRef = useRef<Array<{ x: number; y: number }> | null>(null);
   const lastPoseQuatRef = useRef<THREE.Quaternion | null>(null);
-  const lastFRef = useRef<THREE.Vector3 | null>(null);
+  const lockDirRef = useRef<THREE.Vector3 | null>(null);
 
   // 摄像头 / 检测
   const streamRef = useRef<MediaStream | null>(null);
@@ -309,19 +309,24 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         // 只记录目标值，位置/角度/大小统一在渲染循环里平滑逼近
         targetPoseRef.current.scale = qrSizeCmRef.current / CARD_W3D;
 
-        // 卡片中轴/旋转轴 = 二维码平面内的"垂直方向"（图形上下方向，pose 局部 +Y = e2）
+        // 卡片中轴 = 二维码平面内的"垂直方向"（图形上下方向，pose 局部 +Y = e2）
         const up = new THREE.Vector3(0, 1, 0).applyQuaternion(pose.quaternion);
-        // 卡片正面朝向 = 相机方向投影到"垂直于 up"的平面
-        const toCam = pose.position.clone().negate();
-        let f = toCam.clone().sub(up.clone().multiplyScalar(toCam.dot(up)));
-        if (f.lengthSq() < 1e-8) {
-          // 相机方向恰沿 up 时朝向不唯一：继承上一帧朝向，或取平面内水平方向(e1)
-          f = lastFRef.current
-            ? lastFRef.current.clone()
-            : new THREE.Vector3(1, 0, 0).applyQuaternion(pose.quaternion);
+        // 卡片正面朝向：锁定在二维码本地坐标系（首次朝相机，之后相对二维码固定），
+        // 这样转动视角时能看到卡片的不同面（真实 3D 物体行为），而非总面向相机
+        let f: THREE.Vector3;
+        if (lockDirRef.current) {
+          f = lockDirRef.current.clone().applyQuaternion(pose.quaternion);
+        } else {
+          const toCam = pose.position.clone().negate();
+          let f0 = toCam.clone().sub(up.clone().multiplyScalar(toCam.dot(up)));
+          if (f0.lengthSq() < 1e-8) {
+            f0 = new THREE.Vector3(1, 0, 0).applyQuaternion(pose.quaternion);
+          }
+          f0.normalize();
+          // 转到二维码本地坐标系后固定
+          lockDirRef.current = f0.clone().applyQuaternion(pose.quaternion.clone().invert());
+          f = f0;
         }
-        f.normalize();
-        lastFRef.current = f.clone();
         const right = new THREE.Vector3().crossVectors(up, f).normalize();
         const rot = new THREE.Matrix4().makeBasis(right, up, f);
 
@@ -430,6 +435,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           if (Date.now() - lastDetectRef.current > 800) {
             lastPoseQuatRef.current = null;
             smoothCornersRef.current = null;
+            lockDirRef.current = null;
           }
           const sm = smoothCorners(cornersRaw, smoothCornersRef.current);
           smoothCornersRef.current = sm;
@@ -621,7 +627,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           {status === 'error' && <VideoOff className="w-3.5 h-3.5 text-red-400" />}
           <span className="font-medium">
             {status === 'starting' && '正在启动摄像头'}
-            {status === 'searching' && '正在寻找二维码'}
+            {status === 'searching' && '正在识别二维码'}
             {status === 'mismatch' && '检测到其他二维码'}
             {status === 'locked' && '已识别到二维码'}
             {status === 'error' && '摄像头启动失败'}
