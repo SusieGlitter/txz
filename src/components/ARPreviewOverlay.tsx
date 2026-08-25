@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { X, ScanLine, VideoOff, RefreshCw, RotateCw } from 'lucide-react';
 import { estimateQRPose, QRPose } from '../utils/qrPose';
-import { detectAprilTags } from '../utils/apriltagDetector';
+import { detectAprilTags, initAprilTag } from '../utils/apriltagDetector';
 import { AR_APRILTAG_ID } from '../utils/apriltagGen';
 import { CARD_W3D, CARD_H3D } from '../utils/diecutShape';
 
@@ -14,14 +14,17 @@ interface ARPreviewOverlayProps {
   autoRotate: boolean;
   /** 模型旋转轴：'normal' 绕 AprilTag 法线（竖着转），'plane' 绕平面内轴（躺着转） */
   rotateAxis: ARAxisMode;
+  /** 躺着转时旋转轴在 AprilTag 平面内的角度（度，0-360，0 = 沿 e1，90 = 沿 e2） */
+  planeAngle: number;
   onClose: () => void;
 }
 
 const CAMERA_FOV = 45; // 固定垂直视场角假设（无需校准），位姿估算与渲染相机一致
 const DETECT_INTERVAL = 150; // 检测间隔 ms
-const MAX_SCAN = 960; // AprilTag 检测的最大扫描宽度（更高分辨率有助于识别小锚点）
+const MAX_SCAN = 1120; // AprilTag 检测的最大扫描宽度（分辨率越高，远处/小锚点越容易识别）
 const ROTATE_SPEED = 0.006; // 自动旋转角速度（与主预览一致）
 const SMOOTH = 0.2; // 位置/角度/大小平滑系数（每帧向目标逼近的比例，越小越平稳）
+const IDENTITY_QUAT = new THREE.Quaternion(); // 单位四元数（axisGroup 竖转模式目标，只读复用）
 
 type StatusKind = 'starting' | 'searching' | 'mismatch' | 'locked' | 'error';
 
@@ -58,6 +61,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   qrSizeCm,
   autoRotate,
   rotateAxis,
+  planeAngle,
   onClose,
 }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -98,6 +102,8 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   const autoRotateRef = useRef<boolean>(autoRotate);
   const rotateAxisRef = useRef<ARAxisMode>(rotateAxis);
   rotateAxisRef.current = rotateAxis;
+  const planeAngleRef = useRef<number>(planeAngle);
+  planeAngleRef.current = planeAngle;
   const draggingRef = useRef<boolean>(false);
   const lastPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -173,6 +179,9 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
 
       setCameraError(null);
 
+      // 预加载 AprilTag wasm 检测器（避免首帧检测等待 wasm 加载/编译）
+      initAprilTag().catch((err) => console.warn('AprilTag wasm 预加载失败:', err));
+
       // 3D 场景初始化（AprilTag wasm 检测器在使用时懒加载）
       // 初始化 3D 场景
       const scene = new THREE.Scene();
@@ -217,15 +226,20 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
       // 模型层级：anchorGroup(贴合 AprilTag) -> axisGroup(旋转轴切换) -> spinGroup(旋转) -> 模型
       // anchorGroup 本地坐标：+X=e2(平面内)、+Y=e3(法线/竖直)、+Z=e1(平面内面朝固定方向)。
       // 模型长轴沿本地 +Y 抬升 → 卡片竖直立在锚点上、面朝固定方向，不跟随摄像机。
-      // axisGroup.rotation.x：0 → spin 绕法线 e3（竖着旋转，转盘式）；
-      //                     -90° → spin 绕平面内轴 e1（躺着旋转，翻书式）。
+      // axisGroup 单位四元数 → spin 绕法线 e3（竖着旋转，转盘式）；
+      // Euler(-90°, planeAngle, 0, 'YXZ') → spin 绕平面内轴（躺着旋转，翻书式），
+      // 旋转轴方向 = sin(planeAngle)·e2 + cos(planeAngle)·e1（planeAngle=0 沿 e1，90 沿 e2）。
       const anchorGroup = new THREE.Group();
       scene.add(anchorGroup);
       anchorGroupRef.current = anchorGroup;
       const axisGroup = new THREE.Group();
       anchorGroup.add(axisGroup);
       axisGroupRef.current = axisGroup;
-      axisGroup.rotation.x = rotateAxisRef.current === 'plane' ? -Math.PI / 2 : 0;
+      if (rotateAxisRef.current === 'plane') {
+        axisGroup.quaternion.setFromEuler(
+          new THREE.Euler(-Math.PI / 2, (planeAngleRef.current * Math.PI) / 180, 0, 'YXZ')
+        );
+      }
       const spinGroup = new THREE.Group();
       axisGroup.add(spinGroup);
       spinGroupRef.current = spinGroup;
@@ -364,6 +378,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
       };
 
       // 渲染循环：锚点平滑跟随 + 模型大小平滑 + 自动旋转
+      const axisTargetQuat = new THREE.Quaternion(); // 躺转模式的 axisGroup 目标朝向（复用，避免每帧分配）
       const tick = () => {
         rafRef.current = requestAnimationFrame(tick);
         const anchor = anchorGroupRef.current;
@@ -382,11 +397,18 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           model.position.set(0, (CARD_H3D / 2) * ns, 0);
         }
         const spin = spinGroupRef.current;
-        // 旋转轴切换：'plane' 时 axisGroup 预转 -90°，使 spin 绕 AprilTag 平面内轴（躺着转）
+        // 旋转轴切换：'plane' 时 axisGroup 用 Euler('YXZ') 组合 —— 先绕法线转 planeAngle，
+        // 再绕平面内轴转 -90°，使 spin 的旋转轴落在 AprilTag 平面内、与 e1 夹角为 planeAngle
         const axis = axisGroupRef.current;
         if (axis) {
-          const targetX = rotateAxisRef.current === 'plane' ? -Math.PI / 2 : 0;
-          axis.rotation.x += (targetX - axis.rotation.x) * 0.3;
+          if (rotateAxisRef.current === 'plane') {
+            axisTargetQuat.setFromEuler(
+              new THREE.Euler(-Math.PI / 2, (planeAngleRef.current * Math.PI) / 180, 0, 'YXZ')
+            );
+            axis.quaternion.slerp(axisTargetQuat, 0.3);
+          } else {
+            axis.quaternion.slerp(IDENTITY_QUAT, 0.3);
+          }
         }
         if (spin && autoRotateRef.current && !draggingRef.current) {
           spin.rotation.y += ROTATE_SPEED;
@@ -575,9 +597,6 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
             {status === 'searching' && '正在寻找 AprilTag 锚点'}
             {status === 'locked' && '已识别到 AprilTag'}
             {status === 'error' && '摄像头启动失败'}
-          </span>
-          <span className="text-slate-500 ml-2">
-            识别引擎：AprilTag (tag36h11)
           </span>
         </div>
         <div className="flex items-center gap-2 pointer-events-auto">

@@ -22,7 +22,9 @@ function ensureScriptLoaded(): Promise<void> {
       return;
     }
     const s = document.createElement('script');
-    s.src = '/wasm/apriltag_wasm.js';
+    // 用 BASE_URL 前缀：GitHub Pages 子路径部署（base:'./'）下绝对 /wasm/ 会 404，
+    // 相对 BASE_URL 才能解析到 <repo>/wasm/。
+    s.src = `${import.meta.env.BASE_URL}wasm/apriltag_wasm.js`;
     s.async = true;
     s.onload = () => resolve();
     s.onerror = () => reject(new Error('AprilTag WASM 脚本加载失败'));
@@ -36,7 +38,9 @@ async function getModule(): Promise<any> {
       await ensureScriptLoaded();
       const factory = (window as any).AprilTagWasm;
       if (!factory) throw new Error('AprilTagWasm 工厂不可用');
-      const mod = await factory({ wasmBinaryFile: '/wasm/apriltag_wasm.wasm' });
+      const mod = await factory({
+        wasmBinaryFile: `${import.meta.env.BASE_URL}wasm/apriltag_wasm.wasm`,
+      });
       // 用 cwrap 包装（该构建无 ccall）。tag36h11 固定家族；return_pose=0（位姿用我们自己的 estimateQRPose）
       const cwrap = mod.cwrap;
       api = {
@@ -46,8 +50,10 @@ async function getModule(): Promise<any> {
         detect: cwrap('atagjs_detect', 'number', []),
       };
       api.init();
-      // decimate=1.5（轻微降采样提速，对小 tag 仍保留精度）；refine_edges=1 精化边缘
-      api.setOptions(1.5, 0.0, 1, 1, 0, 0, 0);
+      // decimate=1.0：不做降采样。手机摄像头场景 tag 通常较小，
+      // 1.5 倍降采样会进一步缩小导致漏检；1.0 保留原始像素以提升小 tag 检测率。
+      // refine_edges=1 精化边缘。
+      api.setOptions(1.0, 0.0, 1, 1, 0, 0, 0);
       mod._imgPtr = 0;
       mod._imgW = 0;
       mod._imgH = 0;
@@ -70,6 +76,14 @@ export interface AprilTagDetection {
   /** 4 角点，顺序 [BL, BR, TR, TL]（AprilTag 标准） */
   corners: AprilTagPoint[];
   center: AprilTagPoint;
+}
+
+/**
+ * 预加载并初始化 AprilTag wasm 检测器（幂等，可多次调用）。
+ * 在打开 AR 时提前调用，避免首帧检测等待 wasm 加载。
+ */
+export async function initAprilTag(): Promise<void> {
+  await getModule();
 }
 
 /**

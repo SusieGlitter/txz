@@ -71,6 +71,8 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const [arOpen, setArOpen] = useState<boolean>(false);
   // 模型旋转轴：'normal' 绕 AprilTag 法线（竖着转），'plane' 绕平面内轴（躺着转）
   const [rotateAxis, setRotateAxis] = useState<'normal' | 'plane'>('normal');
+  // 躺着转时旋转轴在 AprilTag 平面内的角度（0-360，0 = 沿 e1，90 = 沿 e2）
+  const [planeAngle, setPlaneAngle] = useState<number>(0);
   // AR 锚点：固定的 AprilTag（tag36h11 id=0），摄像头识别抗光照/反光
   const [apriltagDataUrl, setApriltagDataUrl] = useState<string>('');
   useEffect(() => {
@@ -996,7 +998,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
                 </button>
               </div>
               <div className="text-[10px] text-slate-500 leading-relaxed">
-                识别该 AprilTag 锚点定位
+                下载并打印锚点，摄像头识别后模型将叠加于其上。
               </div>
               <div className="flex items-center gap-2 text-[11px] text-slate-400">
                 <span className="shrink-0">打印尺寸</span>
@@ -1034,6 +1036,33 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
                   ))}
                 </div>
               </div>
+              {rotateAxis === 'plane' && (
+                <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                  <span className="shrink-0">轴角度</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="360"
+                    step="1"
+                    value={planeAngle}
+                    onChange={(e) => setPlaneAngle(parseFloat(e.target.value))}
+                    className="flex-1 accent-teal-500 h-1"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="360"
+                    step="1"
+                    value={planeAngle}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setPlaneAngle(Number.isFinite(v) ? Math.min(360, Math.max(0, v)) : 0);
+                    }}
+                    className="w-16 px-1 py-0.5 rounded bg-slate-900 border border-slate-700 text-teal-300 font-mono text-right"
+                  />
+                  <span className="text-slate-500">°</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1046,6 +1075,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
           qrSizeCm={qrSizeCm}
           autoRotate={autoRotate}
           rotateAxis={rotateAxis}
+          planeAngle={planeAngle}
           onClose={() => setArOpen(false)}
         />
       )}
