@@ -13,11 +13,10 @@ import {
   HelpCircle,
   RefreshCw,
   Video,
-  QrCode,
   Camera,
 } from 'lucide-react';
-import { toDataURL as qrToDataURL } from 'qrcode';
 import { ARPreviewOverlay } from './ARPreviewOverlay';
+import { renderAprilTagDataUrl, AR_APRILTAG_ID } from '../utils/apriltagGen';
 import { PassCardInfo, E1Options, DEFAULT_LAYER_VISIBILITY } from '../types';
 import {
   renderFrontCard,
@@ -67,13 +66,21 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const [isRecordingGif, setIsRecordingGif] = useState<boolean>(false);
   const [sceneReady, setSceneReady] = useState<boolean>(false);
 
-  // 二维码生成与 AR 摄像头预览
-  const [qrSizeCm, setQrSizeCm] = useState<number>(5); // 二维码物理边长（cm），AR 识别时作为模型缩放基准
+  // AprilTag AR 锚点与 AR 摄像头预览
+  const [qrSizeCm, setQrSizeCm] = useState<number>(5); // AprilTag 物理边长（cm），AR 识别时作为模型缩放基准
   const [arOpen, setArOpen] = useState<boolean>(false);
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
-
-  // 二维码内容与通行证条形码内容保持一致
-  const qrText = info.barcode_text || info.english_name || info.id || 'ARKNIGHTS - R001';
+  // 模型旋转轴：'normal' 绕 AprilTag 法线（竖着转），'plane' 绕平面内轴（躺着转）
+  const [rotateAxis, setRotateAxis] = useState<'normal' | 'plane'>('normal');
+  // AR 锚点：固定的 AprilTag（tag36h11 id=0），摄像头识别抗光照/反光
+  const [apriltagDataUrl, setApriltagDataUrl] = useState<string>('');
+  useEffect(() => {
+    try {
+      setApriltagDataUrl(renderAprilTagDataUrl());
+    } catch (err) {
+      console.error('AprilTag 生成失败:', err);
+      setApriltagDataUrl('');
+    }
+  }, []);
 
   // 刀线形状（含孔洞）——由刀线 mask 提取，用于构建真实扫出体积的亚克力几何体
   const [diecutShape, setDiecutShape] = useState<THREE.Shape | null>(null);
@@ -158,29 +165,11 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // 生成二维码（内容 = 条形码内容）
-  useEffect(() => {
-    let cancelled = false;
-    if (!qrText) return;
-    // version 2（25 模块）含 alignment pattern：透视倾斜下 jsQR/ZXing 才能稳定识别。
-    // version 1 无 alignment pattern，摄像头倾斜扫描时解码会失败。若内容过长无法用
-    // version 2 编码，回退到自动版本（长内容自动版本本身就有 alignment pattern）。
-    qrToDataURL(qrText, { width: 512, margin: 2, errorCorrectionLevel: 'M', version: 2 })
-      .catch(() => qrToDataURL(qrText, { width: 512, margin: 2, errorCorrectionLevel: 'M' }))
-      .then((url) => {
-        if (!cancelled) setQrDataUrl(url);
-      })
-      .catch((err) => console.error('二维码生成失败:', err));
-    return () => {
-      cancelled = true;
-    };
-  }, [qrText]);
-
-  const downloadQr = () => {
-    if (!qrDataUrl) return;
+  const downloadApriltag = () => {
+    if (!apriltagDataUrl) return;
     const a = document.createElement('a');
-    a.href = qrDataUrl;
-    a.download = `通行证二维码_${info.english_name || info.chinese_name || 'card'}.png`;
+    a.href = apriltagDataUrl;
+    a.download = `AR锚点_AprilTag_id${AR_APRILTAG_ID}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -964,7 +953,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
             </div>
             <div>
               <div className="font-bold text-slate-200">自动旋转展示</div>
-              <div className="text-[10px] text-slate-500">开启后亚克力牌将水平匀速旋转展示双面工艺</div>
+              <div className="text-[10px] text-slate-500">开启后亚克力牌将水平匀速旋转</div>
             </div>
           </div>
           <button
@@ -979,35 +968,35 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
           </button>
         </div>
 
-        {/* Row 3: 生成二维码（内容 = 条形码内容，可下载；AR 摄像头识别后模型将叠加到二维码上方） */}
+        {/* Row 3: AR 锚点（固定 AprilTag）——摄像头识别它来定位模型，比二维码抗光照/反光 */}
         <div className="bg-slate-900/60 border border-slate-800 p-3 rounded-xl">
           <div className="flex items-start gap-3">
             <div className="shrink-0 bg-white p-1.5 rounded-lg shadow-inner">
-              {qrDataUrl ? (
-                <img src={qrDataUrl} alt="通行证二维码" className="w-24 h-24" />
+              {apriltagDataUrl ? (
+                <img src={apriltagDataUrl} alt="AprilTag AR 锚点" className="w-24 h-24" />
               ) : (
                 <div className="w-24 h-24 flex items-center justify-center text-slate-300">
-                  <QrCode className="w-8 h-8" />
+                  <Camera className="w-8 h-8" />
                 </div>
               )}
             </div>
             <div className="flex-1 min-w-0 space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-1.5 text-slate-200 font-semibold">
-                  <QrCode className="w-4 h-4 text-blue-400" />
-                  <span>生成二维码</span>
+                  <Camera className="w-4 h-4 text-teal-400" />
+                  <span>AR 锚点（AprilTag id={AR_APRILTAG_ID}）</span>
                 </div>
                 <button
-                  onClick={downloadQr}
-                  disabled={!qrDataUrl}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/25 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  title="下载二维码 PNG（内容与条形码一致）"
+                  onClick={downloadApriltag}
+                  disabled={!apriltagDataUrl}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 hover:bg-teal-500 text-white shadow-md shadow-teal-900/25 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  title="下载 AprilTag 锚点图，打印/显示后供 AR 摄像头识别"
                 >
-                  下载二维码 PNG
+                  下载 AR 锚点 PNG
                 </button>
               </div>
-              <div className="text-[10px] text-slate-500 truncate" title={qrText}>
-                内容（与条形码一致）：{qrText}
+              <div className="text-[10px] text-slate-500 leading-relaxed">
+                识别该 AprilTag 锚点定位
               </div>
               <div className="flex items-center gap-2 text-[11px] text-slate-400">
                 <span className="shrink-0">打印尺寸</span>
@@ -1018,23 +1007,45 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
                   step="0.5"
                   value={qrSizeCm}
                   onChange={(e) => setQrSizeCm(parseFloat(e.target.value))}
-                  className="flex-1 accent-blue-500 h-1"
+                  className="flex-1 accent-teal-500 h-1"
                 />
-                <span className="font-mono text-blue-400 font-bold w-12 text-right">{qrSizeCm} cm</span>
-                <span className="text-slate-500 hidden md:inline">（AR 识别时的模型缩放基准，打印时按此尺寸）</span>
+                <span className="font-mono text-teal-400 font-bold w-12 text-right">{qrSizeCm} cm</span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <span className="shrink-0">旋转轴</span>
+                <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs">
+                  {(
+                    [
+                      { id: 'normal', label: '竖着转（绕法线）' },
+                      { id: 'plane', label: '躺着转（绕平面内）' },
+                    ] as const
+                  ).map((o) => (
+                    <button
+                      key={o.id}
+                      onClick={() => setRotateAxis(o.id)}
+                      className={`px-2.5 py-1 rounded-md font-medium transition ${
+                        rotateAxis === o.id
+                          ? 'bg-teal-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* AR 摄像头全屏预览：扫描二维码后把模型叠加到二维码上方 */}
+      {/* AR 摄像头全屏预览：扫描 AprilTag 锚点后把模型叠加到锚点上方 */}
       {arOpen && (
         <ARPreviewOverlay
           passGroup={passGroupRef.current}
-          qrText={qrText}
           qrSizeCm={qrSizeCm}
           autoRotate={autoRotate}
+          rotateAxis={rotateAxis}
           onClose={() => setArOpen(false)}
         />
       )}

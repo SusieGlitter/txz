@@ -1,59 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { X, ScanLine, VideoOff, RefreshCw, RotateCw } from 'lucide-react';
-import jsQR from 'jsqr';
 import { estimateQRPose, QRPose } from '../utils/qrPose';
+import { detectAprilTags } from '../utils/apriltagDetector';
+import { AR_APRILTAG_ID } from '../utils/apriltagGen';
 import { CARD_W3D, CARD_H3D } from '../utils/diecutShape';
 
-// ---- BarcodeDetector 原生 API 类型声明（Chrome/Edge 支持，不在 lib.dom 中）----
-interface DetectedBarcode {
-  rawValue: string;
-  cornerPoints: Array<{ x: number; y: number }>;
-  boundingBox: DOMRectReadOnly;
-  format: string;
-}
-interface BarcodeDetectorInstance {
-  detect(source: CanvasImageSource): Promise<DetectedBarcode[]>;
-}
-interface BarcodeDetectorCtor {
-  new (options?: { formats?: string[] }): BarcodeDetectorInstance;
-  getSupportedFormats(): Promise<string[]>;
-}
-declare global {
-  // eslint-disable-next-line no-var
-  var BarcodeDetector: BarcodeDetectorCtor | undefined;
-}
+export type ARAxisMode = 'normal' | 'plane';
 
 interface ARPreviewOverlayProps {
   passGroup: THREE.Group | null;
-  qrText: string;
   qrSizeCm: number;
   autoRotate: boolean;
+  /** 模型旋转轴：'normal' 绕 AprilTag 法线（竖着转），'plane' 绕平面内轴（躺着转） */
+  rotateAxis: ARAxisMode;
   onClose: () => void;
 }
 
 const CAMERA_FOV = 45; // 固定垂直视场角假设（无需校准），位姿估算与渲染相机一致
 const DETECT_INTERVAL = 150; // 检测间隔 ms
-const JSQR_MAX_SCAN = 960; // jsQR 扫描的最大宽度（更高分辨率有助于识别小二维码）
+const MAX_SCAN = 960; // AprilTag 检测的最大扫描宽度（更高分辨率有助于识别小锚点）
 const ROTATE_SPEED = 0.006; // 自动旋转角速度（与主预览一致）
 const SMOOTH = 0.2; // 位置/角度/大小平滑系数（每帧向目标逼近的比例，越小越平稳）
 
-type DetectorKind = 'native' | 'jsqr';
 type StatusKind = 'starting' | 'searching' | 'mismatch' | 'locked' | 'error';
 
-// ---- 位姿稳定性辅助 ----
-
-/** 4 个角点可能的旋转排列（二维码存在 90° 旋转歧义：哪条边在前面） */
-const CORNER_PERMS = [
-  [0, 1, 2, 3],
-  [1, 2, 3, 0],
-  [2, 3, 0, 1],
-  [3, 0, 1, 2],
-];
-
 /**
- * 角点指数平滑（减少 jsQR/原生检测的帧间抖动）。
- * 若二维码像素尺寸突变（>50%，视为跳变/重扫），直接重置平滑器。
+ * 角点指数平滑（减少 AprilTag 检测的帧间抖动）。
+ * 若锚点像素尺寸突变（>50%，视为跳变/重扫），直接重置平滑器。
  */
 function smoothCorners(
   raw: Array<{ x: number; y: number }>,
@@ -75,51 +49,15 @@ function smoothCorners(
 }
 
 /**
- * 方向消歧：原生 BarcodeDetector 的角点顺序不保证与二维码方向对齐，
- * 按 4 个旋转排列各解一次位姿，取与上一帧旋转最接近的解（|quaternion 点积| 最大），
- * 从而稳定"哪条边在前面"。无参考帧时默认取原始顺序。
- */
-function disambiguatePose(
-  corners: Array<{ x: number; y: number }>,
-  imageWidth: number,
-  imageHeight: number,
-  qrSizeCm: number,
-  fovYDeg: number,
-  refQuat: THREE.Quaternion | null
-): QRPose | null {
-  let best: QRPose | null = null;
-  let bestScore = -Infinity;
-  for (let k = 0; k < CORNER_PERMS.length; k++) {
-    const p = CORNER_PERMS[k];
-    const c = [corners[p[0]], corners[p[1]], corners[p[2]], corners[p[3]]];
-    const pose = estimateQRPose(c, imageWidth, imageHeight, qrSizeCm, fovYDeg);
-    if (!pose) continue;
-    let score = 0;
-    if (refQuat) {
-      const q = pose.quaternion;
-      // quaternion 与 -quaternion 等价，取绝对值
-      score = Math.abs(q.x * refQuat.x + q.y * refQuat.y + q.z * refQuat.z + q.w * refQuat.w);
-    } else {
-      score = -k; // 无参考：原始顺序优先
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      best = pose;
-    }
-  }
-  return best;
-}
-
-/**
- * 摄像头 AR：识别二维码后把通行证 3D 模型"立"在二维码平面上。
- * - 通过单应矩阵估算二维码平面位姿（固定焦距假设），模型底面贴合二维码平面
- * - 透视渲染 3D 模型，支持按配置自动旋转与拖动旋转
+ * 摄像头 AR：识别 AprilTag 锚点后把通行证 3D 模型"立"在锚点平面上。
+ * - 通过单应矩阵估算锚点平面位姿（固定焦距假设），模型底面贴合锚点平面
+ * - 透视渲染 3D 模型，支持按配置自动旋转与拖动旋转（旋转轴可选：法线竖转 / 平面内躺转）
  */
 export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   passGroup,
-  qrText,
   qrSizeCm,
   autoRotate,
+  rotateAxis,
   onClose,
 }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -132,10 +70,11 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const anchorGroupRef = useRef<THREE.Group | null>(null); // 贴合二维码的锚点组
+  const anchorGroupRef = useRef<THREE.Group | null>(null); // 贴合 AprilTag 的锚点组
+  const axisGroupRef = useRef<THREE.Group | null>(null); // 旋转轴切换：法线(竖转)/平面内(躺转)
   const spinGroupRef = useRef<THREE.Group | null>(null); // 自动/拖动旋转
   const modelRef = useRef<THREE.Group | null>(null);
-  const frameRef = useRef<THREE.LineSegments | null>(null); // 框住二维码的空间框（右下角切角指示方向）
+  const frameRef = useRef<THREE.LineSegments | null>(null); // 框住 AprilTag 的空间框（右下角切角指示方向）
   const rafRef = useRef<number | null>(null);
   const targetPoseRef = useRef<{ position: THREE.Vector3; quaternion: THREE.Quaternion; scale: number }>({
     position: new THREE.Vector3(0, 0, 0),
@@ -143,15 +82,12 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
     scale: 0,
   });
 
-  // 位姿稳定性：角点平滑、方向消歧参考、正对时朝向继承
+  // 位姿稳定性：角点平滑
   const smoothCornersRef = useRef<Array<{ x: number; y: number }> | null>(null);
-  const lastPoseQuatRef = useRef<THREE.Quaternion | null>(null);
-  const lastFRef = useRef<THREE.Vector3 | null>(null);
   const focalPxRef = useRef<number>(0); // 自动标定的相机焦距（px），0 = 未标定（使用默认 fov）
 
   // 摄像头 / 检测
   const streamRef = useRef<MediaStream | null>(null);
-  const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
   const scanCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const intervalRef = useRef<number | null>(null);
   const lastDetectRef = useRef<number>(0);
@@ -160,12 +96,13 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
 
   // 旋转控制
   const autoRotateRef = useRef<boolean>(autoRotate);
+  const rotateAxisRef = useRef<ARAxisMode>(rotateAxis);
+  rotateAxisRef.current = rotateAxis;
   const draggingRef = useRef<boolean>(false);
   const lastPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const [status, setStatus] = useState<StatusKind>('starting');
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [detectorKind, setDetectorKind] = useState<DetectorKind | 'none'>('none');
   const [arAutoRotate, setArAutoRotate] = useState<boolean>(autoRotate);
   autoRotateRef.current = arAutoRotate;
 
@@ -236,22 +173,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
 
       setCameraError(null);
 
-      // 初始化检测器：优先原生 BarcodeDetector，否则 jsQR
-      try {
-        const Ctor = typeof window !== 'undefined' ? window.BarcodeDetector : undefined;
-        if (Ctor && Ctor.getSupportedFormats) {
-          const formats = await Ctor.getSupportedFormats();
-          if (formats.includes('qr_code')) {
-            detectorRef.current = new Ctor({ formats: ['qr_code'] });
-            setDetectorKind('native');
-          }
-        }
-      } catch (err) {
-        console.warn('BarcodeDetector 不可用，回退到 jsQR:', err);
-      }
-      if (!detectorRef.current) setDetectorKind('jsqr');
-      if (!active) return;
-
+      // 3D 场景初始化（AprilTag wasm 检测器在使用时懒加载）
       // 初始化 3D 场景
       const scene = new THREE.Scene();
       sceneRef.current = scene;
@@ -292,15 +214,20 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
       dirLight2.position.set(-4, 2, 3);
       scene.add(dirLight2);
 
-      // 模型层级：anchorGroup(贴合二维码) -> spinGroup(自动/拖动旋转) -> 模型
-      // 关键：anchorGroup 本地 +Y = 二维码平面内的垂直方向(局部 +Y/e2)，因此
-      // 旋转轴(spinGroup.rotation.y 绕 anchor 本地 Y) 恒与二维码平面垂直方向平行；
-      // 模型沿 +Y 抬升 → 卡片中轴 = 平面内垂直方向，卡片立在二维码上、正面朝向相机。
+      // 模型层级：anchorGroup(贴合 AprilTag) -> axisGroup(旋转轴切换) -> spinGroup(旋转) -> 模型
+      // anchorGroup 本地坐标：+X=e2(平面内)、+Y=e3(法线/竖直)、+Z=e1(平面内面朝固定方向)。
+      // 模型长轴沿本地 +Y 抬升 → 卡片竖直立在锚点上、面朝固定方向，不跟随摄像机。
+      // axisGroup.rotation.x：0 → spin 绕法线 e3（竖着旋转，转盘式）；
+      //                     -90° → spin 绕平面内轴 e1（躺着旋转，翻书式）。
       const anchorGroup = new THREE.Group();
       scene.add(anchorGroup);
       anchorGroupRef.current = anchorGroup;
+      const axisGroup = new THREE.Group();
+      anchorGroup.add(axisGroup);
+      axisGroupRef.current = axisGroup;
+      axisGroup.rotation.x = rotateAxisRef.current === 'plane' ? -Math.PI / 2 : 0;
       const spinGroup = new THREE.Group();
-      anchorGroup.add(spinGroup);
+      axisGroup.add(spinGroup);
       spinGroupRef.current = spinGroup;
 
       if (passGroup) {
@@ -310,7 +237,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         modelRef.current = model;
       }
 
-      // 二维码空间框：LineSegments 画二维码四边，右下角切角（斜线）指示方向
+      // AprilTag 空间框：LineSegments 画锚点四边，右下角切角（斜线）指示方向
       const frameGeo = new THREE.BufferGeometry();
       frameGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(10 * 3), 3));
       const frameMat = new THREE.LineBasicMaterial({
@@ -324,7 +251,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
       scene.add(frame);
       frameRef.current = frame;
 
-      // 更新空间框：贴合二维码四边（尺寸 = qrSizeCm），右下角切角表示方向
+      // 更新空间框：贴合 AprilTag 四边（尺寸 = qrSizeCm），右下角切角表示方向
       const updateFrame = (pose: QRPose) => {
         const f = frameRef.current;
         if (!f) return;
@@ -359,28 +286,21 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         f.visible = true;
       };
 
-      // 按二维码位姿放置锚点：模型底边中点贴合二维码中心，卡片立于二维码平面
+      // 按 AprilTag 位姿放置锚点：模型固定在锚点上（不随相机转动）。
+      // 模型局部坐标：+Y=卡片长轴/抬高方向，+Z=卡片面法线。
+      // - 长轴 → 锚点法线 e3：卡片竖直立在锚点上（底部贴锚点中心）
+      // - 面法线 → 锚点平面内 e1：面朝固定方向，移动摄像头时能看到卡片不同角度
       const applyPose = (pose: QRPose) => {
         const model = modelRef.current;
         if (!model) return;
         // 只记录目标值，位置/角度/大小统一在渲染循环里平滑逼近
         targetPoseRef.current.scale = qrSizeCmRef.current / CARD_W3D;
 
-        // 卡片中轴/旋转轴 = 二维码平面内的"垂直方向"（图形上下方向，pose 局部 +Y = e2）
-        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(pose.quaternion);
-        // 卡片正面朝向 = 相机方向投影到"垂直于 up"的平面
-        const toCam = pose.position.clone().negate();
-        let f = toCam.clone().sub(up.clone().multiplyScalar(toCam.dot(up)));
-        if (f.lengthSq() < 1e-8) {
-          // 相机方向恰沿 up 时朝向不唯一：继承上一帧朝向，或取平面内水平方向(e1)
-          f = lastFRef.current
-            ? lastFRef.current.clone()
-            : new THREE.Vector3(1, 0, 0).applyQuaternion(pose.quaternion);
-        }
-        f.normalize();
-        lastFRef.current = f.clone();
-        const right = new THREE.Vector3().crossVectors(up, f).normalize();
-        const rot = new THREE.Matrix4().makeBasis(right, up, f);
+        const e1 = new THREE.Vector3(1, 0, 0).applyQuaternion(pose.quaternion);
+        const e2 = new THREE.Vector3(0, 1, 0).applyQuaternion(pose.quaternion);
+        const e3 = new THREE.Vector3(0, 0, 1).applyQuaternion(pose.quaternion);
+        // makeBasis(xAxis, yAxis, zAxis)：局部 X→e2、Y→e3（竖直）、Z→e1（固定朝向）
+        const rot = new THREE.Matrix4().makeBasis(e2, e3, e1);
 
         targetPoseRef.current.position.copy(pose.position);
         targetPoseRef.current.quaternion.setFromRotationMatrix(rot);
@@ -462,6 +382,12 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           model.position.set(0, (CARD_H3D / 2) * ns, 0);
         }
         const spin = spinGroupRef.current;
+        // 旋转轴切换：'plane' 时 axisGroup 预转 -90°，使 spin 绕 AprilTag 平面内轴（躺着转）
+        const axis = axisGroupRef.current;
+        if (axis) {
+          const targetX = rotateAxisRef.current === 'plane' ? -Math.PI / 2 : 0;
+          axis.rotation.x += (targetX - axis.rotation.x) * 0.3;
+        }
         if (spin && autoRotateRef.current && !draggingRef.current) {
           spin.rotation.y += ROTATE_SPEED;
         }
@@ -487,116 +413,60 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         const vw = video.videoWidth;
         const vh = video.videoHeight;
         if (!vw || !vh) return { kind: 'none' };
-        const target = qrText.trim();
-
-        // 角点平滑 + 位姿求解。
-        // updateRef=true（jsQR 主路径）：jsQR 角点顺序已按二维码方向归一化，
-        //   直接解算即可，无需 4 向消歧（消歧反而可能因噪声选错方向）；
-        // updateRef=false（原生路径）：角点顺序不保证，用 4 向消歧。
-        const refinePose = (
-          cornersRaw: Array<{ x: number; y: number }>,
-          updateRef: boolean
-        ): QRPose | null => {
-          // 丢失过久（>800ms）则重置参考，让重新检测以默认方向重新锁定
+        // 角点平滑 + 位姿求解（AprilTag 角点顺序 [BL,BR,TR,TL] 已归一化为 [TL,TR,BR,BL]）
+        const refinePose = (cornersRaw: Array<{ x: number; y: number }>): QRPose | null => {
+          // 丢失过久（>800ms）则重置平滑器
           if (Date.now() - lastDetectRef.current > 800) {
-            lastPoseQuatRef.current = null;
             smoothCornersRef.current = null;
           }
           const sm = smoothCorners(cornersRaw, smoothCornersRef.current);
           smoothCornersRef.current = sm;
-          let pose: QRPose | null;
-          if (updateRef) {
-            // jsQR 主路径：自动标定焦距（利用二维码正方形正交约束），并对焦距做跨帧 EMA
-            const outFocal = { value: 0 };
-            pose = estimateQRPose(sm, vw, vh, qrSizeCmRef.current, CAMERA_FOV, {
-              focalPx: focalPxRef.current,
-              outFocal,
-            });
-            if (outFocal.value > 0) {
-              focalPxRef.current =
-                focalPxRef.current > 0
-                  ? focalPxRef.current + (outFocal.value - focalPxRef.current) * 0.3
-                  : outFocal.value;
-            }
-            if (pose) lastPoseQuatRef.current = pose.quaternion.clone();
-          } else {
-            pose = disambiguatePose(
-              sm,
-              vw,
-              vh,
-              qrSizeCmRef.current,
-              CAMERA_FOV,
-              lastPoseQuatRef.current
-            );
+          // 自动标定焦距（AprilTag 为已知正方形，正交约束），并对焦距做跨帧 EMA
+          const outFocal = { value: 0 };
+          const pose = estimateQRPose(sm, vw, vh, qrSizeCmRef.current, CAMERA_FOV, {
+            focalPx: focalPxRef.current,
+            outFocal,
+          });
+          if (outFocal.value > 0) {
+            focalPxRef.current =
+              focalPxRef.current > 0
+                ? focalPxRef.current + (outFocal.value - focalPxRef.current) * 0.3
+                : outFocal.value;
           }
           return pose;
         };
 
-        let jsqrPose: QRPose | null = null;
-        let jsqrSawOther = false;
-
-        // 1) jsQR 主检测（方向归一化，稳定"哪条边在前面"）
+        // AprilTag 检测（固定 tag36h11 家族，id=AR_APRILTAG_ID，抗光照/反光/非纯黑白）。
+        // wasm 检测器懒加载，加载失败时本次检测返回 none（下帧重试）。
         try {
           const scan =
             scanCanvasRef.current || (scanCanvasRef.current = document.createElement('canvas'));
           const ctx = scan.getContext('2d', { willReadFrequently: true });
           if (ctx) {
-            const maxW = JSQR_MAX_SCAN;
+            const maxW = MAX_SCAN;
             const scale = Math.min(1, maxW / vw);
             scan.width = Math.max(1, Math.floor(vw * scale));
             scan.height = Math.max(1, Math.floor(vh * scale));
             ctx.drawImage(video, 0, 0, scan.width, scan.height);
             const img = ctx.getImageData(0, 0, scan.width, scan.height);
-            const code = jsQR(img.data, scan.width, scan.height, {
-              inversionAttempts: 'attemptBoth',
-            });
-            if (code) {
-              const matches = target === '' || code.data.trim() === target;
-              const loc = code.location;
-              const corners = [
-                loc.topLeftCorner,
-                loc.topRightCorner,
-                loc.bottomRightCorner,
-                loc.bottomLeftCorner,
-              ].map((p) => ({ x: p.x / scale, y: p.y / scale }));
-              if (matches) {
-                jsqrPose = refinePose(corners, true);
-              } else {
-                jsqrSawOther = true;
-              }
+            const gray = new Uint8Array(scan.width * scan.height);
+            for (let i = 0, j = 0; i < img.data.length; i += 4, j++) {
+              gray[j] = (img.data[i] + 2 * img.data[i + 1] + img.data[i + 2]) >> 2;
+            }
+            const dets = await detectAprilTags(gray, scan.width, scan.height);
+            if (dets && dets.length > 0) {
+              const det = dets.find((d) => d.id === AR_APRILTAG_ID) || dets[0];
+              // AprilTag 角点顺序 [BL, BR, TR, TL] → estimateQRPose 需要的 [TL, TR, BR, BL]
+              const corners = [det.corners[3], det.corners[2], det.corners[1], det.corners[0]].map(
+                (p) => ({ x: p.x / scale, y: p.y / scale })
+              );
+              const pose = refinePose(corners);
+              if (pose) return { kind: 'match', pose };
             }
           }
         } catch (err) {
-          // jsQR 失败忽略
+          // AprilTag wasm 未加载或检测异常，本次忽略
         }
-        if (jsqrPose) return { kind: 'match', pose: jsqrPose };
-
-        // 2) 原生 BarcodeDetector 补充（角点顺序不保证，仅消歧、不写方向参考）
-        let nativePose: QRPose | null = null;
-        let nativeSawOther = false;
-        const detector = detectorRef.current;
-        if (detector) {
-          try {
-            const codes = await detector.detect(video);
-            for (const c of codes) {
-              if (!c.cornerPoints || c.cornerPoints.length !== 4) continue;
-              const matches = target === '' || c.rawValue.trim() === target;
-              if (matches) {
-                const pose = refinePose(c.cornerPoints, false);
-                if (pose) {
-                  nativePose = pose;
-                  break;
-                }
-              } else {
-                nativeSawOther = true;
-              }
-            }
-          } catch (err) {
-            // 原生检测异常时忽略，下一次再试
-          }
-        }
-        if (nativePose) return { kind: 'match', pose: nativePose };
-        if (jsqrSawOther || nativeSawOther) return { kind: 'other' };
         return { kind: 'none' };
       };
 
@@ -607,14 +477,6 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           lastDetectRef.current = Date.now();
           applyPose(result.pose);
           setStatus('locked');
-        } else if (result.kind === 'other') {
-          setStatus((s) => {
-            // 目标二维码已丢失（误扫到其他二维码）：同样给 1500ms 宽限后退出 locked
-            if (s === 'locked') {
-              return Date.now() - lastDetectRef.current < 1500 ? 'locked' : 'mismatch';
-            }
-            return 'mismatch';
-          });
         } else {
           setStatus((s) => {
             if (s === 'locked') {
@@ -710,18 +572,12 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
           {status === 'error' && <VideoOff className="w-3.5 h-3.5 text-red-400" />}
           <span className="font-medium">
             {status === 'starting' && '正在启动摄像头'}
-            {status === 'searching' && '正在寻找二维码'}
-            {status === 'mismatch' && '检测到其他二维码'}
-            {status === 'locked' && '已识别到二维码'}
+            {status === 'searching' && '正在寻找 AprilTag 锚点'}
+            {status === 'locked' && '已识别到 AprilTag'}
             {status === 'error' && '摄像头启动失败'}
           </span>
           <span className="text-slate-500 ml-2">
-            识别引擎：
-            {detectorKind === 'native'
-              ? '原生 BarcodeDetector'
-              : detectorKind === 'jsqr'
-                ? 'jsQR'
-                : '未初始化'}
+            识别引擎：AprilTag (tag36h11)
           </span>
         </div>
         <div className="flex items-center gap-2 pointer-events-auto">
