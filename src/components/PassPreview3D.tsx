@@ -17,10 +17,13 @@ import {
 } from 'lucide-react';
 import { ARPreviewOverlay } from './ARPreviewOverlay';
 import { renderAprilTagDataUrl, AR_APRILTAG_ID } from '../utils/apriltagGen';
-import { PassCardInfo, E1Options, DEFAULT_LAYER_VISIBILITY } from '../types';
+import { createAcrylicRefractionMaterial } from '../utils/acrylicRefraction';
+import { PassCardInfo, E1Options, LayerVisibilityConfig, DEFAULT_LAYER_VISIBILITY } from '../types';
 import {
   renderFrontCard,
   renderBackCard,
+  renderWhiteCard,
+  getBackInnerBorderTemplate,
   loadImage,
   preloadPsdAssets,
   getDiecutMask,
@@ -94,6 +97,19 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const middleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const backCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  const [showFaceDebug, setShowFaceDebug] = useState<boolean>(false);
+  const [debugFaceTab, setDebugFaceTab] = useState<'frontOuter' | 'frontInner' | 'backInner' | 'backOuter'>('backInner');
+  const debugLayerCanvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+
+  const downloadBackInnerBorderTemplate = async () => {
+    const canvas = await getBackInnerBorderTemplate();
+    if (!canvas) return;
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = '背面内侧_专用饰边模板.png';
+    a.click();
+  };
+
   // Three.js object references for dynamic updates
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -104,6 +120,9 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   const isRecordingGifRef = useRef<boolean>(false);
   const recordGifRef = useRef<(() => Promise<void>) | null>(null);
   const passGroupRef = useRef<THREE.Group | null>(null);
+  const acrylicDefaultMatsRef = useRef<THREE.Material[] | null>(null);
+  const arOpenRef = useRef<boolean>(arOpen);
+  arOpenRef.current = arOpen;
 
   // Geometry and Mesh references
   const acrylicMeshRef = useRef<THREE.Mesh | null>(null);
@@ -328,10 +347,11 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
             barcode: false,
             idAndNameText: false,
             professionFactionText: false,
-            borderOverlay: false,
+              borderOverlay: true,
           },
           cutoutObj,
-          true // Apply diecut for 3D preview
+          true, // Apply diecut for 3D preview
+          'backInner'
         );
 
         // --- D. Draw Back Print Layer ---
@@ -376,6 +396,86 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     };
   }, [isPreloading, info, e1Opts, frontPhotoUrl, cutoutPhotoUrl, customIconUrl, fontTick]);
 
+  // Render the selected face as individually inspectable layer snapshots, in
+  // the same bottom-to-top order used by the source compositor.
+  useEffect(() => {
+    if (!canvasKey || !showFaceDebug) return;
+    let active = true;
+    const layerDefs: Record<string, Array<{ key: keyof LayerVisibilityConfig; label: string }>> = {
+      frontOuter: [
+        { key: 'background', label: '背景' },
+        { key: 'characterPhoto', label: '人物照片' },
+        { key: 'baseboard', label: '精一底板' },
+        { key: 'factionWatermark', label: '阵营水印' },
+        { key: 'borderOverlay', label: '饰边/外框' },
+        { key: 'barcode', label: '条码' },
+        { key: 'idAndNameText', label: 'ID 与名称' },
+        { key: 'professionFactionText', label: '职业/阵营文字' },
+      ],
+      frontInner: [
+        { key: 'characterPhoto', label: '人物白墨' },
+        { key: 'baseboard', label: '精一底板白墨' },
+        { key: 'borderOverlay', label: '饰边白墨' },
+        { key: 'idAndNameText', label: 'ID 与名称白墨' },
+        { key: 'professionFactionText', label: '职业/阵营白墨' },
+      ],
+      backInner: [
+        { key: 'borderOverlay', label: '背面内侧专用饰边模板' },
+        { key: 'characterPhoto', label: '人物抠图' },
+        { key: 'baseboard', label: '精一底板' },
+        { key: 'factionWatermark', label: '阵营水印' },
+      ],
+      backOuter: [
+        { key: 'background', label: '背景' },
+        { key: 'characterPhoto', label: '人物剪影' },
+        { key: 'baseboard', label: '精一底板剪影' },
+        { key: 'borderOverlay', label: '饰边/外框' },
+        { key: 'barcode', label: '条码' },
+        { key: 'professionFactionText', label: '职业/阵营文字' },
+      ],
+    };
+
+    const only = (key: keyof LayerVisibilityConfig): LayerVisibilityConfig => ({
+      background: key === 'background',
+      characterPhoto: key === 'characterPhoto',
+      baseboard: key === 'baseboard',
+      factionWatermark: key === 'factionWatermark',
+      barcode: key === 'barcode',
+      idAndNameText: key === 'idAndNameText',
+      professionFactionText: key === 'professionFactionText',
+      borderOverlay: key === 'borderOverlay',
+    });
+
+    const renderLayers = async () => {
+      const defs = layerDefs[debugFaceTab] || [];
+      const [img1Obj, cutoutObj, customIconObj] = await Promise.all([
+        frontPhotoUrl ? loadImage(frontPhotoUrl) : Promise.resolve(null),
+        cutoutPhotoUrl ? loadImage(cutoutPhotoUrl) : Promise.resolve(null),
+        customIconUrl ? loadImage(customIconUrl) : Promise.resolve(null),
+      ]);
+      for (const def of defs) {
+        if (!active) return;
+        const canvas = debugLayerCanvasRefs.current[`${debugFaceTab}:${def.key}`];
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) continue;
+        canvas.width = CARD_WIDTH;
+        canvas.height = CARD_HEIGHT;
+        const layers = only(def.key);
+        if (debugFaceTab === 'frontOuter') {
+          await renderFrontCard(ctx, info, img1Obj, e1Opts, customIconObj, layers, cutoutObj, true);
+        } else if (debugFaceTab === 'frontInner') {
+          await renderWhiteCard(ctx, info, cutoutObj, e1Opts, img1Obj, customIconObj, layers, true);
+        } else if (debugFaceTab === 'backInner') {
+          await renderFrontCard(ctx, info, img1Obj, e1Opts, customIconObj, layers, cutoutObj, true, 'backInner');
+        } else {
+          await renderBackCard(ctx, info, cutoutObj, e1Opts, img1Obj, layers, true);
+        }
+      }
+    };
+    renderLayers();
+    return () => { active = false; };
+  }, [canvasKey, showFaceDebug, debugFaceTab, info, e1Opts, frontPhotoUrl, cutoutPhotoUrl, customIconUrl]);
+
   // 4. Initialize and Render 3D Canvas Scene
   useEffect(() => {
     if (isPreloading || (!diecutShape && !shapeFailed)) return;
@@ -402,6 +502,9 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Multi-pass refraction needs the inner layer, acrylic, and outer layer
+    // to accumulate in one frame instead of being auto-cleared each draw.
+    renderer.autoClear = false;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     // Fix color space
@@ -495,17 +598,21 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     const acrylicGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
     acrylicGeo.center(); // Center geometry around (0,0,0) so front face is at +halfD and back is at -halfD
 
-    // 顶面/底面（两个水平印刷面）：清透亚克力玻璃质感，半透明叠加显示印刷层
+    // 顶面/底面：真实透明实体。印刷层由深度缓冲和背面剔除决定可见性，
+    // 不再通过视角分支手动切换印刷面。
     const capMat = new THREE.MeshPhysicalMaterial({
       color: new THREE.Color('#ffffff'),
       roughness: 0.12,
       metalness: 0.0,
       transparent: true,
-      opacity: 0.2, // 更透亮，减轻灰蒙蒙观感
+      opacity: 0.2,
+      transmission: 0.35,
+      ior: 1.49,
+      thickness,
       clearcoat: 0.4,
       clearcoatRoughness: 0.12,
       specularIntensity: 1.0,
-      side: THREE.FrontSide,
+      side: THREE.DoubleSide,
       depthWrite: false, // 不写深度，让背后的印刷层透过半透明面可见
     });
 
@@ -535,29 +642,141 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     };
     const frostedBump = createFrostedBump();
 
-    // 侧面：半透明磨砂（取修改前完全不透明磨砂与修改后半透明的中间值）
+    // 侧面：透明磨砂实体，始终由真实挤出几何体渲染。
     const sideMat = new THREE.MeshPhysicalMaterial({
       color: new THREE.Color('#ffffff'),
-      roughness: 0.9, // 磨砂但保留部分透光
+      roughness: 0.62,
       metalness: 0.0,
       transparent: true,
-      opacity: 0.78,
-      clearcoat: 0.0, // 无清漆高光
+      opacity: 0.46,
+      clearcoat: 0.0,
       clearcoatRoughness: 1.0,
-      specularIntensity: 0.1,
-      bumpMap: frostedBump, // 磨砂颗粒
-      bumpScale: 0.12,
+      specularIntensity: 0.08,
+      bumpMap: frostedBump,
+      bumpScale: 0.045,
       side: THREE.FrontSide,
       depthWrite: false, // 透明材质不写深度
     });
 
     // ExtrudeGeometry 材质组：group 0 = 顶面+底面（水平印刷面，用 capMat），group 1 = 侧面（用 sideMat）
-    const acrylicMesh = new THREE.Mesh(acrylicGeo, [capMat, sideMat, capMat]);
+    const acrylicMesh: THREE.Mesh<THREE.ExtrudeGeometry, THREE.Material | THREE.Material[]> =
+      new THREE.Mesh(acrylicGeo, [capMat, sideMat, capMat]);
+    acrylicMesh.userData.isAcrylicBody = true;
     acrylicMesh.receiveShadow = true;
     acrylicMesh.renderOrder = 3;
     acrylicMesh.scale.set(1, 1, thickness); // Scale along Z for thickness
     passGroup.add(acrylicMesh);
     acrylicMeshRef.current = acrylicMesh;
+
+    const acrylicDefaultMats: THREE.Material[] = [capMat, sideMat, capMat];
+    acrylicDefaultMatsRef.current = acrylicDefaultMats;
+
+    const envRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, stencilBuffer: false });
+    const backfaceRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, stencilBuffer: false });
+    envRT.texture.colorSpace = THREE.SRGBColorSpace;
+    backfaceRT.texture.colorSpace = THREE.NoColorSpace;
+
+    const backfaceMaterial = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: true,
+      toneMapped: false,
+      vertexShader: `
+        varying vec3 vBackfaceNormal;
+        void main() {
+          vBackfaceNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vBackfaceNormal;
+        void main() {
+          gl_FragColor = vec4(normalize(vBackfaceNormal) * 0.5 + 0.5, 1.0);
+        }
+      `,
+    });
+
+    const refractCapMat = createAcrylicRefractionMaterial({
+      envMap: envRT.texture,
+      backfaceMap: backfaceRT.texture,
+      frost: 0,
+      refractionStrength: 0.72,
+      thickness,
+    });
+    const refractSideMat = createAcrylicRefractionMaterial({
+      envMap: envRT.texture,
+      backfaceMap: backfaceRT.texture,
+      frost: 0.2,
+      transmission: 0.75,
+      refractionStrength: 0.32,
+      thickness,
+    });
+    const refractionMats: THREE.Material[] = [refractCapMat, refractSideMat, refractCapMat];
+    let printMeshes: THREE.Mesh[] = [];
+    let outerPrints: THREE.Mesh[] = [];
+    let innerPrints: THREE.Mesh[] = [];
+
+    // Physical render order: inner prints -> acrylic -> outer prints.
+    // No camera-angle visibility thresholds are used. Face culling and depth
+    // buffering determine which physical surface is visible.
+    const renderFrame = () => {
+      if (arOpenRef.current) {
+        acrylicMesh.material = acrylicDefaultMats;
+        acrylicMesh.visible = true;
+        printMeshes.forEach((mesh) => (mesh.visible = true));
+        renderer.setRenderTarget(null);
+        renderer.clear();
+        renderer.render(scene, camera);
+        return;
+      }
+
+      const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+      const targetWidth = Math.max(1, Math.floor(size.x));
+      const targetHeight = Math.max(1, Math.floor(size.y));
+      if (envRT.width !== targetWidth || envRT.height !== targetHeight) {
+        envRT.setSize(targetWidth, targetHeight);
+        backfaceRT.setSize(targetWidth, targetHeight);
+      }
+      refractCapMat.uniforms.resolution.value.copy(size);
+      refractSideMat.uniforms.resolution.value.copy(size);
+      refractCapMat.uniforms.slabThickness.value = thickness;
+      refractSideMat.uniforms.slabThickness.value = thickness;
+
+      // Pass A: inner prints are the captured scene behind the acrylic.
+      acrylicMesh.visible = false;
+      outerPrints.forEach((mesh) => (mesh.visible = false));
+      innerPrints.forEach((mesh) => (mesh.visible = true));
+      renderer.setRenderTarget(envRT);
+      renderer.clear();
+      renderer.render(scene, camera);
+
+      // Pass B: capture the back-facing normal of the acrylic slab.
+      innerPrints.forEach((mesh) => (mesh.visible = false));
+      acrylicMesh.visible = true;
+      acrylicMesh.material = backfaceMaterial;
+      renderer.setRenderTarget(backfaceRT);
+      renderer.clear();
+      renderer.render(scene, camera);
+
+      // Pass C: draw inner prints, refractive acrylic, then sharp outer prints.
+      acrylicMesh.visible = false;
+      innerPrints.forEach((mesh) => (mesh.visible = true));
+      renderer.setRenderTarget(null);
+      renderer.clear();
+      renderer.render(scene, camera);
+
+      acrylicMesh.visible = true;
+      acrylicMesh.material = refractionMats;
+      renderer.render(scene, camera);
+
+      acrylicMesh.visible = false;
+      innerPrints.forEach((mesh) => (mesh.visible = false));
+      outerPrints.forEach((mesh) => (mesh.visible = true));
+      renderer.render(scene, camera);
+
+      acrylicMesh.material = acrylicDefaultMats;
+      acrylicMesh.visible = true;
+      printMeshes.forEach((mesh) => (mesh.visible = true));
+    };
 
     // Helper to assign correct [0, 1] texture coordinates based on X/Y card dimensions
     const assignUVs = (geometry: THREE.BufferGeometry, width: number, height: number, flipU: boolean = false) => {
@@ -601,6 +820,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       depthWrite: true, // Write depth to handle spatial occlusion automatically
     });
     const frontMesh = new THREE.Mesh(planeGeo, frontMat);
+    frontMesh.userData.printLayer = 'frontOuter';
     frontMesh.renderOrder = 5;
     passGroup.add(frontMesh);
     frontMeshRef.current = frontMesh;
@@ -614,19 +834,23 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       depthWrite: true,
     });
     const frontBackingMesh = new THREE.Mesh(planeGeo, frontBackingMat);
+    frontBackingMesh.userData.printLayer = 'frontInner';
     frontBackingMesh.renderOrder = 4;
     passGroup.add(frontBackingMesh);
     frontBackingMeshRef.current = frontBackingMesh;
 
-    // C. Middle Print Layer (中层：立绘、底板、阵营) - faces front, printed inside back
+    // C. Back inner print. This layer is printed on the inner back surface
+    // but faces forward, so it is naturally visible through the acrylic from
+    // the front and is culled from the back by the single-sided material.
     const middleMat = new THREE.MeshBasicMaterial({
       map: middleTex,
       transparent: false,
       alphaTest: 0.1,
-      side: THREE.DoubleSide, // Double sided so standing cutout and graphics are visible looking from front or back
+      side: THREE.FrontSide,
       depthWrite: true,
     });
     const middleMesh = new THREE.Mesh(planeGeo, middleMat);
+    middleMesh.userData.printLayer = 'backInner';
     middleMesh.renderOrder = 2;
     passGroup.add(middleMesh);
     middleMeshRef.current = middleMesh;
@@ -640,11 +864,18 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       depthWrite: true,
     });
     const backMesh = new THREE.Mesh(backPlaneGeo, backMat);
+    backMesh.userData.printLayer = 'backOuter';
     backMesh.renderOrder = 1;
     passGroup.add(backMesh);
     backMeshRef.current = backMesh;
 
+    printMeshes = [frontMesh, frontBackingMesh, middleMesh, backMesh];
+    outerPrints = [frontMesh, backMesh];
+    innerPrints = [frontBackingMesh, middleMesh];
+
     // Setup positions based on thickness (depth/2)
+    // 印刷层相对亚克力表面向外偏移 0.001 单位（=0.01mm，1 单位=1cm）：
+    // 让印刷层清晰覆盖在亚克力折射面上，避免与表面共面导致渲染计算混乱。
     const updatePositions = () => {
       const halfD = thickness / 2;
 
@@ -653,16 +884,16 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
         acrylicMeshRef.current.scale.set(1, 1, thickness);
       }
       if (frontMeshRef.current) {
-        frontMeshRef.current.position.set(0, 0, halfD + 0.006);
+        frontMeshRef.current.position.set(0, 0, halfD + 0.001);
       }
       if (frontBackingMeshRef.current) {
-        frontBackingMeshRef.current.position.set(0, 0, halfD + 0.002);
+        frontBackingMeshRef.current.position.set(0, 0, halfD - 0.002);
       }
       if (middleMeshRef.current) {
         middleMeshRef.current.position.set(0, 0, -halfD + 0.002);
       }
       if (backMeshRef.current) {
-        backMeshRef.current.position.set(0, 0, -halfD - 0.006);
+        backMeshRef.current.position.set(0, 0, -halfD - 0.001);
       }
     };
 
@@ -708,7 +939,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
 
         for (let i = 0; i < frames; i++) {
           passGroup.rotation.y = startAngle + (i / frames) * Math.PI * 2;
-          renderer.render(scene, camera);
+          renderFrame();
           offCtx.clearRect(0, 0, targetW, targetH);
           offCtx.drawImage(renderer.domElement, 0, 0, targetW, targetH);
           const { data } = offCtx.getImageData(0, 0, targetW, targetH);
@@ -750,7 +981,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       }
 
       controls.update();
-      renderer.render(scene, camera);
+      renderFrame();
     };
 
     animate();
@@ -800,6 +1031,12 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
       middleTex.dispose();
       backTex.dispose();
       frostedBump.dispose();
+      envRT.dispose();
+      backfaceRT.dispose();
+      backfaceMaterial.dispose();
+      refractCapMat.dispose();
+      refractSideMat.dispose();
+      acrylicDefaultMatsRef.current = null;
 
       passGroupRef.current = null;
       setSceneReady(false);
@@ -815,16 +1052,16 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
     const halfD = thickness / 2;
 
     if (frontMeshRef.current) {
-      frontMeshRef.current.position.set(0, 0, halfD + 0.006);
+      frontMeshRef.current.position.set(0, 0, halfD + 0.001);
     }
     if (frontBackingMeshRef.current) {
-      frontBackingMeshRef.current.position.set(0, 0, halfD + 0.002);
+      frontBackingMeshRef.current.position.set(0, 0, halfD - 0.002);
     }
     if (middleMeshRef.current) {
       middleMeshRef.current.position.set(0, 0, -halfD + 0.002);
     }
     if (backMeshRef.current) {
-      backMeshRef.current.position.set(0, 0, -halfD - 0.006);
+      backMeshRef.current.position.set(0, 0, -halfD - 0.001);
     }
 
     // Update Acrylic Core geometry and scale when thickness changes
@@ -834,9 +1071,9 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
   }, [thickness, canvasKey]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 rounded-none overflow-hidden text-xs">
+    <div className="flex flex-col h-full bg-slate-900 rounded-none overflow-y-auto text-xs">
       {/* 3D View Container & Canvas Overlay Controls */}
-      <div className="relative flex-1 min-h-[460px] bg-radial from-slate-900 to-slate-950 flex items-center justify-center border-b border-slate-800">
+      <div className="relative flex-none h-[520px] min-h-[520px] rounded-xl border border-slate-800/80 overflow-hidden bg-radial from-slate-900 to-slate-950 flex items-center justify-center border-b border-slate-800">
         {isPreloading && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md text-blue-400 gap-3">
             <RefreshCw className="w-6 h-6 animate-spin" />
@@ -1066,6 +1303,75 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
             </div>
           </div>
         </div>
+
+        <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-amber-300">四个印刷面调试</div>
+              <div className="mt-1 text-[10px] text-slate-400">查看正面外侧、正面内侧、背面内侧、背面外侧的原始合成内容</div>
+            </div>
+            <button
+              onClick={() => setShowFaceDebug((prev) => !prev)}
+              className="shrink-0 rounded-lg border border-amber-500/60 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20"
+            >
+              {showFaceDebug ? '隐藏调试面板' : '打开四面调试'}
+            </button>
+          </div>
+        </div>
+
+        </div>
+
+      {/* 四个印刷面调试：先选面，再按叠加顺序查看单层 */}
+      <div className="px-4 py-3 bg-slate-950/80 border-t border-slate-900">
+        {showFaceDebug && (
+          <div className="mt-3 space-y-3">
+            <div className="flex flex-wrap gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+              {([
+                ['frontOuter', '正面外侧'],
+                ['frontInner', '正面内侧'],
+                ['backInner', '背面内侧'],
+                ['backOuter', '背面外侧'],
+              ] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setDebugFaceTab(key)} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${debugFaceTab === key ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-100'}`}>
+                  {label}
+                </button>
+              ))}
+              <button
+                onClick={downloadBackInnerBorderTemplate}
+                className="ml-auto px-3 py-1.5 rounded-md text-xs font-semibold text-teal-300 hover:bg-teal-500/15"
+                title="保存背面内侧专用饰边模板"
+              >
+                保存内侧边框模板
+              </button>
+            </div>
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+            {(debugFaceTab === 'frontOuter' ? [
+              ['background', '背景'], ['characterPhoto', '人物照片'], ['baseboard', '精一底板'], ['factionWatermark', '阵营水印'], ['borderOverlay', '饰边/外框'], ['barcode', '条码'], ['idAndNameText', 'ID 与名称'], ['professionFactionText', '职业/阵营文字'],
+            ] : debugFaceTab === 'frontInner' ? [
+              ['characterPhoto', '人物白墨'], ['baseboard', '精一底板白墨'], ['borderOverlay', '饰边白墨'], ['idAndNameText', 'ID 与名称白墨'], ['professionFactionText', '职业/阵营白墨'],
+            ] : debugFaceTab === 'backInner' ? [
+              ['borderOverlay', '专用饰边模板'], ['characterPhoto', '人物抠图'], ['baseboard', '精一底板'], ['factionWatermark', '阵营水印'],
+            ] : [
+              ['background', '背景'], ['characterPhoto', '人物剪影'], ['baseboard', '精一底板剪影'], ['borderOverlay', '饰边/外框'], ['barcode', '条码'], ['professionFactionText', '职业/阵营文字'],
+            ]).map(([layerKey, label], index) => {
+              const canvasKey = `${debugFaceTab}:${layerKey}`;
+              return (
+                <div key={canvasKey} className="min-w-0 rounded-lg border border-amber-500/30 bg-slate-900 p-2">
+                <div className="mb-2 text-[11px] font-bold text-amber-300">{index + 1}. {label}</div>
+                <div className="rounded border border-slate-700 bg-[linear-gradient(45deg,#1e293b_25%,transparent_25%),linear-gradient(-45deg,#1e293b_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1e293b_75%),linear-gradient(-45deg,transparent_75%,#1e293b_75%)] bg-[length:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0] overflow-hidden">
+                  <canvas
+                    ref={(node) => { debugLayerCanvasRefs.current[canvasKey] = node; }}
+                    width={CARD_WIDTH}
+                    height={CARD_HEIGHT}
+                    className="block w-full h-auto"
+                  />
+                </div>
+                </div>
+              );
+            })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* AR 摄像头全屏预览：扫描 AprilTag 锚点后把模型叠加到锚点上方 */}
@@ -1073,6 +1379,7 @@ export const PassPreview3D: React.FC<PassPreview3DProps> = ({
         <ARPreviewOverlay
           passGroup={passGroupRef.current}
           qrSizeCm={qrSizeCm}
+          thickness={thickness}
           autoRotate={autoRotate}
           rotateAxis={rotateAxis}
           planeAngle={planeAngle}
