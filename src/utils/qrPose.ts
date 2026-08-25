@@ -108,6 +108,241 @@ function matrixToAxisAngle(R: THREE.Matrix3): { axis: THREE.Vector3; angle: numb
   return { axis, angle };
 }
 
+/**
+ * 对称 3×3 矩阵（列主序 elements）的 Jacobi 特征分解。
+ * 返回特征值（降序）与特征向量矩阵 V（列为特征向量，正交单位）。
+ * 内部用行主序 number[][] 实现，避免列主序索引混淆。
+ */
+export function jacobiSymmetric3(A: number[]): { values: number[]; V: THREE.Matrix3 } {
+  // 转行主序
+  const a = [
+    [A[0], A[3], A[6]],
+    [A[1], A[4], A[7]],
+    [A[2], A[5], A[8]],
+  ];
+  const V = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ];
+  for (let sweep = 0; sweep < 60; sweep++) {
+    const off = Math.abs(a[0][1]) + Math.abs(a[0][2]) + Math.abs(a[1][2]);
+    if (off < 1e-14) break;
+    for (const [p, q] of [[0, 1], [0, 2], [1, 2]] as const) {
+      const apq = a[p][q];
+      if (Math.abs(apq) < 1e-14) continue;
+      const app = a[p][p];
+      const aqq = a[q][q];
+      const theta = (aqq - app) / (2 * apq);
+      const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+      const c = 1 / Math.sqrt(t * t + 1);
+      const s = t * c;
+      const r = 3 - p - q;
+      const apr = a[p][r];
+      const aqr = a[q][r];
+      // A ← J^T A J
+      a[p][p] = c * c * app - 2 * s * c * apq + s * s * aqq;
+      a[q][q] = s * s * app + 2 * s * c * apq + c * c * aqq;
+      a[p][q] = 0;
+      a[q][p] = 0;
+      a[p][r] = c * apr - s * aqr;
+      a[r][p] = a[p][r];
+      a[q][r] = s * apr + c * aqr;
+      a[r][q] = a[q][r];
+      // V ← V J（V 的第 p、q 列线性组合）
+      for (let i = 0; i < 3; i++) {
+        const vip = V[i][p];
+        const viq = V[i][q];
+        V[i][p] = c * vip - s * viq;
+        V[i][q] = s * vip + c * viq;
+      }
+    }
+  }
+  // 特征值降序排列，同时重排 V 列
+  const idx = [0, 1, 2].sort((x, y) => a[y][y] - a[x][x]);
+  const values = idx.map((i) => a[i][i]);
+  const V2 = new THREE.Matrix3().set(
+    V[0][idx[0]], V[0][idx[1]], V[0][idx[2]],
+    V[1][idx[0]], V[1][idx[1]], V[1][idx[2]],
+    V[2][idx[0]], V[2][idx[1]], V[2][idx[2]],
+  );
+  return { values, V: V2 };
+}
+
+/** 3×3 矩阵 SVD（A = U·diag(S)·V^T）。通过 A^T A 的 Jacobi 特征分解构造。 */
+export function svd3(A: THREE.Matrix3): { U: THREE.Matrix3; S: number[]; V: THREE.Matrix3 } {
+  const e = A.elements;
+  // B = A^T A（对称半正定）
+  const B = [
+    e[0] * e[0] + e[1] * e[1] + e[2] * e[2],
+    e[0] * e[3] + e[1] * e[4] + e[2] * e[5],
+    e[0] * e[6] + e[1] * e[7] + e[2] * e[8],
+    e[0] * e[3] + e[1] * e[4] + e[2] * e[5],
+    e[3] * e[3] + e[4] * e[4] + e[5] * e[5],
+    e[3] * e[6] + e[4] * e[7] + e[5] * e[8],
+    e[0] * e[6] + e[1] * e[7] + e[2] * e[8],
+    e[3] * e[6] + e[4] * e[7] + e[5] * e[8],
+    e[6] * e[6] + e[7] * e[7] + e[8] * e[8],
+  ];
+  const { values, V } = jacobiSymmetric3(B);
+  const S = values.map((v) => Math.sqrt(Math.max(0, v)));
+  const U = new THREE.Matrix3();
+  const Ue = U.elements;
+  for (let col = 0; col < 3; col++) {
+    const vc = [V.elements[col * 3], V.elements[col * 3 + 1], V.elements[col * 3 + 2]];
+    const av = [
+      e[0] * vc[0] + e[3] * vc[1] + e[6] * vc[2],
+      e[1] * vc[0] + e[4] * vc[1] + e[7] * vc[2],
+      e[2] * vc[0] + e[5] * vc[1] + e[8] * vc[2],
+    ];
+    if (S[col] > 1e-10) {
+      Ue[col * 3] = av[0] / S[col];
+      Ue[col * 3 + 1] = av[1] / S[col];
+      Ue[col * 3 + 2] = av[2] / S[col];
+    } else {
+      // 零奇异值方向：用叉积构造正交补（顺序保证最终 det(U)=±1）
+      const prev = (col + 2) % 3;
+      const cur = (col + 1) % 3;
+      const uPrev = [Ue[prev * 3], Ue[prev * 3 + 1], Ue[prev * 3 + 2]];
+      const uCur = [Ue[cur * 3], Ue[cur * 3 + 1], Ue[cur * 3 + 2]];
+      const cross = [
+        uPrev[1] * uCur[2] - uPrev[2] * uCur[1],
+        uPrev[2] * uCur[0] - uPrev[0] * uCur[2],
+        uPrev[0] * uCur[1] - uPrev[1] * uCur[0],
+      ];
+      const n = Math.hypot(cross[0], cross[1], cross[2]) || 1;
+      Ue[col * 3] = cross[0] / n;
+      Ue[col * 3 + 1] = cross[1] / n;
+      Ue[col * 3 + 2] = cross[2] / n;
+    }
+  }
+  return { U, S, V };
+}
+
+/**
+ * 3×3 极分解（Polar Decomposition）：M = R·S，R 是"最接近"M 的旋转矩阵（SO(3)）。
+ * 通过 SVD：R = U·V^T。这是对整矩阵的全局最优正交化，
+ * 与 Gram-Schmidt 的串行投影不同，不受向量顺序影响，大透视下更稳定（AprilTag 同款做法）。
+ */
+function polarDecompose(M: THREE.Matrix3): THREE.Matrix3 {
+  const { U, S: _S, V } = svd3(M);
+  const R = U.clone().multiply(V.clone().transpose());
+  // 保证 det(R) = +1（右手系）：若 det<0，只需翻转第三列（U 第三列取反），
+  // 使 R 仍是"最近的"旋转矩阵。整体乘 -1 会把 4 个方向全翻转，产生错误旋转。
+  if (R.determinant() < 0) {
+    const e = R.elements;
+    e[6] = -e[6];
+    e[7] = -e[7];
+    e[8] = -e[8];
+  }
+  return R;
+}
+
+/**
+ * 正交迭代（Orthogonal Iteration，Lu et al. 2000，AprilTag 同款）：
+ * 交替固定 R 优化 t、固定 t 优化 R，最小化"物方重投影误差"（object-space error）。
+ * 相比像素域的高斯-牛顿 PnP，对平面 tag 的角点噪声更鲁棒、无数值雅可比奇异问题。
+ *
+ * @param objectPoints 平面点 [x,y]（tag 局部坐标，z=0，单位与 qrSizeCm 一致）
+ * @param imagePoints  对应图像点 [u,v]（像素）
+ */
+export function orthogonalIteration(
+  objectPoints: number[][],
+  imagePoints: number[][],
+  fx: number,
+  fy: number,
+  cx: number,
+  cy: number,
+  R0: THREE.Matrix3,
+  t0: THREE.Vector3,
+  nSteps = 50
+): { R: THREE.Matrix3; t: THREE.Vector3 } | null {
+  // 内部统一使用 CV 相机坐标（+Z 向前，z>0 在相机前方），与观测方向 v=(x_n,y_n,1) 一致。
+  // 传入的 R0/t0 是 Three.js 坐标（+Y 向上、-Z 向前），需转换；返回时再转回。
+  const flipV = (v: THREE.Vector3) => new THREE.Vector3(v.x, -v.y, -v.z);
+  const toCV = (R: THREE.Matrix3) => {
+    const e = R.elements;
+    return new THREE.Matrix3().set(
+      e[0], e[3], e[6],
+      -e[1], -e[4], -e[7],
+      -e[2], -e[5], -e[8]
+    );
+  };
+  // 归一化观测方向 v_i = ((u-cx)/fx, (v-cy)/fy, 1)
+  const v: THREE.Vector3[] = [];
+  for (const [u, vv] of imagePoints) {
+    v.push(new THREE.Vector3((u - cx) / fx, (vv - cy) / fy, 1));
+  }
+  const P = objectPoints.map(([x, y]) => new THREE.Vector3(x, y, 0));
+  // 模型点均值（z=0，均值 z 亦为 0）
+  const Pm = new THREE.Vector3();
+  for (const p of P) Pm.add(p);
+  Pm.multiplyScalar(1 / P.length);
+
+  let R = toCV(R0);
+  let t = flipV(t0);
+  for (let iter = 0; iter < nSteps; iter++) {
+    // E 步：把当前预测点 R·p_i + t 正交投影到观测方向 v_i 上
+    const qs: THREE.Vector3[] = [];
+    for (let i = 0; i < P.length; i++) {
+      const q = applyR(R, P[i]).add(t);
+      const vv2 = v[i].dot(v[i]);
+      const s = v[i].dot(q) / vv2; // 沿观测方向的比例（= 深度，CV 坐标下 z>0 在前方）
+      if (s <= 1e-9) return null; // 点在相机后方
+      qs.push(v[i].clone().multiplyScalar(s));
+    }
+    // M 步：Procrustes 求解 R、t（物方误差）
+    const qm = new THREE.Vector3();
+    for (const q of qs) qm.add(q);
+    qm.multiplyScalar(1 / qs.length);
+    const C = new THREE.Matrix3();
+    const Ce = C.elements;
+    for (let i = 0; i < P.length; i++) {
+      const a = qs[i].clone().sub(qm);
+      const b = P[i].clone().sub(Pm);
+      Ce[0] += a.x * b.x;
+      Ce[3] += a.x * b.y;
+      Ce[6] += a.x * b.z;
+      Ce[1] += a.y * b.x;
+      Ce[4] += a.y * b.y;
+      Ce[7] += a.y * b.z;
+      Ce[2] += a.z * b.x;
+      Ce[5] += a.z * b.y;
+      Ce[8] += a.z * b.z;
+    }
+    const Rn = polarDecompose(C);
+    const tn = qm.clone().sub(applyR(Rn, Pm));
+    const change = matrixDist(Rn, R) + tn.distanceTo(t);
+    R = Rn;
+    t = tn;
+    if (change < 1e-12) break;
+  }
+  // 转回 Three.js 坐标
+  return { R: toCV(R), t: flipV(t) };
+}
+
+/** 3×3 矩阵作用于向量（Three.js 该版本 Matrix3 无 multiplyVector3） */
+function applyR(R: THREE.Matrix3, v: THREE.Vector3): THREE.Vector3 {
+  const e = R.elements;
+  return new THREE.Vector3(
+    e[0] * v.x + e[3] * v.y + e[6] * v.z,
+    e[1] * v.x + e[4] * v.y + e[7] * v.z,
+    e[2] * v.x + e[5] * v.y + e[8] * v.z
+  );
+}
+
+/** 3×3 矩阵 Frobenius 距离（Three.js 该版本 Matrix3 无 distanceTo） */
+function matrixDist(a: THREE.Matrix3, b: THREE.Matrix3): number {
+  const ae = a.elements;
+  const be = b.elements;
+  let s = 0;
+  for (let i = 0; i < 9; i++) {
+    const d = ae[i] - be[i];
+    s += d * d;
+  }
+  return Math.sqrt(s);
+}
+
 /** 位姿参数 [wx,wy,wz,tx,ty,tz] 重投影 4 角点，返回 8 维残差 */
 function computeReprojResidual(
   params: Float64Array,
@@ -159,7 +394,7 @@ function solve6(A: number[][], b: number[]): number[] | null {
  * 高斯-牛顿迭代优化位姿（PnP refine）：以初值 R0/t0 为起点，最小化 4 角点重投影误差。
  * 大角度、角点带噪声时，直接分解的位姿会明显漂移，迭代优化可大幅改善。
  */
-function refinePosePnP(
+export function refinePosePnP(
   R0: THREE.Matrix3,
   t0: THREE.Vector3,
   objectPoints: number[][],
@@ -338,33 +573,63 @@ export function estimateQRPose(
     t.multiplyScalar(-1);
   }
 
-  // Gram-Schmidt 正交化得到旋转矩阵 R = [e1, e2, e3]
-  const e1 = r1.clone().normalize();
-  const e2 = r2.clone().sub(e1.clone().multiplyScalar(r2.dot(e1))).normalize();
-  const e3 = new THREE.Vector3().crossVectors(e1, e2).normalize();
+  // 极分解正交化（AprilTag 同款 SVD 极分解，替代 Gram-Schmidt）：
+  // 先构造 R = [r1 r2 r3]（r3 = r1×r2），再整体投影到最近的 SO(3) 旋转。
+  // 大透视/角点噪声下，整矩阵的全局最优正交化比串行 Gram-Schmidt 更稳定。
+  const r3raw = new THREE.Vector3().crossVectors(r1, r2);
+  const Rraw = new THREE.Matrix3().set(
+    r1.x, r2.x, r3raw.x,
+    r1.y, r2.y, r3raw.y,
+    r1.z, r2.z, r3raw.z
+  );
+  const Rorth = polarDecompose(Rraw);
+  const Re = Rorth.elements;
+  const e1 = new THREE.Vector3(Re[0], Re[1], Re[2]);
+  const e2 = new THREE.Vector3(Re[3], Re[4], Re[5]);
+  const e3 = new THREE.Vector3(Re[6], Re[7], Re[8]);
   // 法线应朝向相机半球（二维码正面朝向相机）：
   // 不能用 e3.z>0 判定——二维码平放桌面时法线朝上(z≈0)，按 z 判定会误翻成朝下。
   const toCameraDir = t.clone().negate().normalize();
   if (e3.dot(toCameraDir) < 0) e3.multiplyScalar(-1);
 
-  // PnP 迭代优化：最小化 4 角点重投影误差，显著提升大角度/角点噪声下的位姿精度。
-  // 以 DLT 结果为初值；仅当优化结果与初值一致（法线仍朝向相机）时采用。
   const R0 = new THREE.Matrix3().set(
     e1.x, e2.x, e3.x,
     e1.y, e2.y, e3.y,
     e1.z, e2.z, e3.z
   );
+
+  // 高斯-牛顿 PnP 精化（像素域误差，无噪声时精确；大透视下比正交迭代更准）。
+  // 仅当优化后的重投影误差不差于初值时才采用，否则退回极分解的 DLT 解。
   const refined = refinePosePnP(R0, t, src, dst, f, cx, cy);
   if (refined) {
     const re = refined.R.elements;
     const re1 = new THREE.Vector3(re[0], re[1], re[2]);
     const re2 = new THREE.Vector3(re[3], re[4], re[5]);
     let re3 = new THREE.Vector3(re[6], re[7], re[8]);
-    // 优化后再次确保法线朝向相机
+    if (re3.dot(toCameraDir) < 0) re3.multiplyScalar(-1);
+    if (reprojError(refined.R, refined.t, src, dst, f, cx, cy) <= reprojError(R0, t, src, dst, f, cx, cy) + 1e-6) {
+      return {
+        valid: true,
+        position: refined.t,
+        quaternion: new THREE.Quaternion().setFromRotationMatrix(
+          new THREE.Matrix4().makeBasis(re1, re2, re3)
+        ),
+        normal: re3,
+      };
+    }
+  }
+
+  // 若 PnP 退化（如完全正对时的奇异 JTJ），正交迭代作兜底（物方误差，无数值雅可比）。
+  const fallback = orthogonalIteration(src, dst, f, f, cx, cy, R0, t);
+  if (fallback) {
+    const re = fallback.R.elements;
+    const re1 = new THREE.Vector3(re[0], re[1], re[2]);
+    const re2 = new THREE.Vector3(re[3], re[4], re[5]);
+    let re3 = new THREE.Vector3(re[6], re[7], re[8]);
     if (re3.dot(toCameraDir) < 0) re3.multiplyScalar(-1);
     return {
       valid: true,
-      position: refined.t,
+      position: fallback.t,
       quaternion: new THREE.Quaternion().setFromRotationMatrix(
         new THREE.Matrix4().makeBasis(re1, re2, re3)
       ),
@@ -380,4 +645,29 @@ export function estimateQRPose(
     ),
     normal: e3,
   };
+}
+
+/** 像素域重投影误差平方和（用于正交迭代结果的取舍判定） */
+function reprojError(
+  R: THREE.Matrix3,
+  t: THREE.Vector3,
+  objectPoints: number[][],
+  imagePoints: number[][],
+  f: number,
+  cx: number,
+  cy: number
+): number {
+  const e = R.elements;
+  let sum = 0;
+  for (let i = 0; i < objectPoints.length; i++) {
+    const [X, Y] = objectPoints[i];
+    const camx = e[0] * X + e[3] * Y + t.x;
+    const camy = e[1] * X + e[4] * Y + t.y;
+    const camz = e[2] * X + e[5] * Y + t.z;
+    if (camz > -1e-6) return Infinity; // 相机后方
+    const u = (f * camx) / -camz + cx;
+    const v = cy + (f * camy) / camz;
+    sum += (u - imagePoints[i][0]) * (u - imagePoints[i][0]) + (v - imagePoints[i][1]) * (v - imagePoints[i][1]);
+  }
+  return sum;
 }
