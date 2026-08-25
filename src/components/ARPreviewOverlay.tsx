@@ -23,7 +23,7 @@ const CAMERA_FOV = 45; // 固定垂直视场角假设（无需校准），位姿
 const DETECT_INTERVAL = 150; // 检测间隔 ms
 const MAX_SCAN = 1120; // AprilTag 检测的最大扫描宽度（分辨率越高，远处/小锚点越容易识别）
 const ROTATE_SPEED = 0.006; // 自动旋转角速度（与主预览一致）
-const SMOOTH = 0.2; // 位置/角度/大小平滑系数（每帧向目标逼近的比例，越小越平稳）
+const SMOOTH = 0.9; // 位置/角度/大小平滑系数（每帧向目标逼近的比例，越小越平稳）
 const IDENTITY_QUAT = new THREE.Quaternion(); // 单位四元数（axisGroup 竖转模式目标，只读复用）
 
 type StatusKind = 'starting' | 'searching' | 'mismatch' | 'locked' | 'error';
