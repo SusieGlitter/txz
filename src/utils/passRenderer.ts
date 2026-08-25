@@ -7,6 +7,8 @@ export const CARD_HEIGHT = 1180;
 
 // Asset Cache for PSD images
 const imageCache: Map<string, HTMLImageElement | null> = new Map();
+let backInnerBorderTemplate: HTMLCanvasElement | null = null;
+let backInnerBorderTemplatePromise: Promise<HTMLCanvasElement | null> | null = null;
 
 import { PSD_ASSETS } from '../data/imageAssets';
 
@@ -75,6 +77,73 @@ export function loadImage(src: string): Promise<HTMLImageElement | null> {
     };
     img.src = actualSrc;
   });
+}
+
+function getOpaqueBounds(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const data = ctx.getImageData(0, 0, width, height).data;
+  let minY = height;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 10) {
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+  return { minY: minY === height ? 0 : minY, maxY: maxY < 0 ? -1 : maxY };
+}
+
+/**
+ * Dedicated border template for the back-inner print. The alpha extent of
+ * the E1 baseboard is measured at render time, then the original front outer border
+ * is clipped asymmetrically before it is used by this layer.
+ */
+export async function getBackInnerBorderTemplate(): Promise<HTMLCanvasElement | null> {
+  if (backInnerBorderTemplate) return backInnerBorderTemplate;
+  if (backInnerBorderTemplatePromise) return backInnerBorderTemplatePromise;
+
+  backInnerBorderTemplatePromise = (async () => {
+    const [baseboardImg, borderImg] = await Promise.all([
+      loadImage('./psd_assets/中间__精一底板.png'),
+      loadImage('./psd_assets/正面__装饰图案__饰边.png'),
+    ]);
+    if (!isImageValid(baseboardImg) || !isImageValid(borderImg)) return null;
+
+    const baseboardCanvas = document.createElement('canvas');
+    baseboardCanvas.width = CARD_WIDTH;
+    baseboardCanvas.height = 495;
+    const baseboardCtx = baseboardCanvas.getContext('2d');
+    if (!baseboardCtx) return null;
+    baseboardCtx.drawImage(baseboardImg, 0, 0, CARD_WIDTH, 495);
+    const bounds = getOpaqueBounds(baseboardCtx, CARD_WIDTH, 495);
+    const opaqueHeight = bounds.maxY >= 0 ? bounds.maxY + 1 : 0;
+    // The measured height is a distance from the bottom edge. Delete content
+    // closer to the bottom than that distance on the left half, and closer
+    // than half that distance on the right half.
+    const boardBottom = CARD_HEIGHT - opaqueHeight;
+    const halfBoardBottom = CARD_HEIGHT - opaqueHeight / 2;
+
+    const template = document.createElement('canvas');
+    template.width = CARD_WIDTH;
+    template.height = CARD_HEIGHT;
+    const templateCtx = template.getContext('2d');
+    if (!templateCtx) return null;
+    templateCtx.drawImage(borderImg, 0, 0, CARD_WIDTH, CARD_HEIGHT);
+    const imageData = templateCtx.getImageData(0, 0, CARD_WIDTH, CARD_HEIGHT);
+    const data = imageData.data;
+    for (let y = 0; y < CARD_HEIGHT; y++) {
+      for (let x = 0; x < CARD_WIDTH; x++) {
+        const cut = x < CARD_WIDTH / 2 ? y >= boardBottom : y >= halfBoardBottom;
+        if (cut) data[(y * CARD_WIDTH + x) * 4 + 3] = 0;
+      }
+    }
+    templateCtx.putImageData(imageData, 0, 0);
+    backInnerBorderTemplate = template;
+    return template;
+  })();
+
+  return backInnerBorderTemplatePromise;
 }
 
 /**
@@ -376,7 +445,8 @@ export async function renderFrontCard(
   customIconImg?: HTMLImageElement | null,
   layers?: LayerVisibilityConfig,
   cutoutObj?: HTMLImageElement | null,
-  applyDiecut: boolean = true
+  applyDiecut: boolean = true,
+  variant: 'front' | 'backInner' = 'front'
 ) {
   ctx.clearRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
@@ -387,6 +457,13 @@ export async function renderFrontCard(
   if (layers?.background !== false) {
     ctx.fillStyle = '#0a0e17';
     ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+  }
+
+  // The back-inner border is a dedicated, pre-clipped template and must be
+  // the lowest layer so the baseboard/photo can cover it.
+  if (variant === 'backInner' && layers?.borderOverlay !== false) {
+    const borderTemplate = await getBackInnerBorderTemplate();
+    if (borderTemplate) ctx.drawImage(borderTemplate, 0, 0);
   }
 
   // 2. Character Photo Layer (人物层 - 覆盖 590x1180 完整画布，按比例缩放填充，绝无拉伸)
@@ -500,7 +577,7 @@ export async function renderFrontCard(
   }
 
   // 5. Decorative Overlays & Border Overlay
-  if (layers?.borderOverlay !== false) {
+  if (variant === 'front' && layers?.borderOverlay !== false) {
     
 
     const arknightsLogoImg = imageCache.get('./psd_assets/正面__装饰图案__明日方舟.png') || await loadImage('./psd_assets/正面__装饰图案__明日方舟.png');
@@ -582,7 +659,9 @@ export async function renderFrontCard(
     ctx.restore();
   }
 
-  await drawGradientStripe(ctx, false, layers);
+  if (variant === 'front') {
+    await drawGradientStripe(ctx, false, layers);
+  }
   if (applyDiecut) {
     await applyDiecutMask(ctx, false);
   }
@@ -766,6 +845,14 @@ export async function renderWhiteCard(
 
   const isE2 = info.elite_phase === 'E2';
 
+  // 边框位于中层最底部，不能覆盖精一底板和人物抠图。
+  if (layers?.borderOverlay !== false) {
+    const borderImg = imageCache.get('./psd_assets/正面__装饰图案__饰边.png') || await loadImage('./psd_assets/正面__装饰图案__饰边.png');
+    if (isImageValid(borderImg)) {
+      offCtx.drawImage(borderImg, 0, 0, 590, 1180);
+    }
+  }
+
   // A. Cutout photo part (干员的抠图部分)
   if (layers?.characterPhoto !== false) {
     const activeCutout = isImageValid(cutoutObj) ? cutoutObj : (isImageValid(frontImgObj) ? frontImgObj : null);
@@ -806,13 +893,7 @@ export async function renderWhiteCard(
     }
   }
 
-  // C. Border Overlay (饰边/边框)
-  if (layers?.borderOverlay !== false) {
-    const borderImg = imageCache.get('./psd_assets/正面__装饰图案__饰边.png') || await loadImage('./psd_assets/正面__装饰图案__饰边.png');
-    if (isImageValid(borderImg)) {
-      offCtx.drawImage(borderImg, 0, 0, 590, 1180);
-    }
-  }
+  // C. Border Overlay 已在中层绘制开始时放置于最底部。
 
   // D. Operator Name (名字: Chinese & English Name)
   if (layers?.idAndNameText !== false) {

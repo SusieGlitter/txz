@@ -5,12 +5,14 @@ import { estimateQRPose, QRPose } from '../utils/qrPose';
 import { detectAprilTags, initAprilTag } from '../utils/apriltagDetector';
 import { AR_APRILTAG_ID } from '../utils/apriltagGen';
 import { CARD_W3D, CARD_H3D } from '../utils/diecutShape';
+import { createAcrylicRefractionMaterial } from '../utils/acrylicRefraction';
 
 export type ARAxisMode = 'normal' | 'plane';
 
 interface ARPreviewOverlayProps {
   passGroup: THREE.Group | null;
   qrSizeCm: number;
+  thickness: number;
   autoRotate: boolean;
   /** 模型旋转轴：'normal' 绕 AprilTag 法线（竖着转），'plane' 绕平面内轴（躺着转） */
   rotateAxis: ARAxisMode;
@@ -23,7 +25,7 @@ const CAMERA_FOV = 45; // 固定垂直视场角假设（无需校准），位姿
 const DETECT_INTERVAL = 150; // 检测间隔 ms
 const MAX_SCAN = 1120; // AprilTag 检测的最大扫描宽度（分辨率越高，远处/小锚点越容易识别）
 const ROTATE_SPEED = 0.006; // 自动旋转角速度（与主预览一致）
-const SMOOTH = 0.9; // 位置/角度/大小平滑系数（每帧向目标逼近的比例，越小越平稳）
+const SMOOTH = 1.0; // 关闭位置/角度/大小平滑，直接跟随最新识别位姿
 const IDENTITY_QUAT = new THREE.Quaternion(); // 单位四元数（axisGroup 竖转模式目标，只读复用）
 
 type StatusKind = 'starting' | 'searching' | 'mismatch' | 'locked' | 'error';
@@ -59,6 +61,7 @@ function smoothCorners(
 export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   passGroup,
   qrSizeCm,
+  thickness,
   autoRotate,
   rotateAxis,
   planeAngle,
@@ -94,6 +97,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const scanCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const intervalRef = useRef<number | null>(null);
+  const detectBusyRef = useRef<boolean>(false);
   const lastDetectRef = useRef<number>(0);
   const qrSizeCmRef = useRef<number>(qrSizeCm);
   qrSizeCmRef.current = qrSizeCm;
@@ -117,6 +121,15 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
     let active = true;
     let resizeHandler: (() => void) | null = null;
     let pointerCleanup: (() => void) | null = null;
+    let arAcrylic: THREE.Mesh | null = null;
+    let arPrintMeshes: THREE.Mesh[] = [];
+    let arOuterPrints: THREE.Mesh[] = [];
+    let arInnerPrints: THREE.Mesh[] = [];
+    let arDefaultMaterials: THREE.Material[] | null = null;
+    let arRefractionMaterials: THREE.Material[] | null = null;
+    let arBackfaceMaterial: THREE.ShaderMaterial | null = null;
+    let arEnvRT: THREE.WebGLRenderTarget | null = null;
+    let arBackfaceRT: THREE.WebGLRenderTarget | null = null;
 
     const disposeAll = () => {
       active = false;
@@ -145,6 +158,18 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         }
         rendererRef.current = null;
       }
+      arEnvRT?.dispose();
+      arBackfaceRT?.dispose();
+      arBackfaceMaterial?.dispose();
+      if (arRefractionMaterials) {
+        arRefractionMaterials.forEach((material, index) => {
+          if (index === 0 || material !== arRefractionMaterials?.[0]) material.dispose();
+        });
+      }
+      arEnvRT = null;
+      arBackfaceRT = null;
+      arBackfaceMaterial = null;
+      arRefractionMaterials = null;
       if (resizeHandler) window.removeEventListener('resize', resizeHandler);
       resizeHandler = null;
       if (pointerCleanup) pointerCleanup();
@@ -176,11 +201,24 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         await video.play();
       }
       if (!active) return;
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        await new Promise<void>((resolve) => {
+          const onReady = () => {
+            video.removeEventListener('loadeddata', onReady);
+            resolve();
+          };
+          video.addEventListener('loadeddata', onReady, { once: true });
+        });
+      }
 
       setCameraError(null);
 
       // 预加载 AprilTag wasm 检测器（避免首帧检测等待 wasm 加载/编译）
-      initAprilTag().catch((err) => console.warn('AprilTag wasm 预加载失败:', err));
+      try {
+        await initAprilTag();
+      } catch (err) {
+        console.warn('AprilTag wasm 预加载失败，检测循环将继续重试:', err);
+      }
 
       // 3D 场景初始化（AprilTag wasm 检测器在使用时懒加载）
       // 初始化 3D 场景
@@ -201,6 +239,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         premultipliedAlpha: false,
       });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.autoClear = false;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.domElement.style.position = 'absolute';
       renderer.domElement.style.inset = '0';
@@ -246,6 +285,57 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
 
       if (passGroup) {
         const model = passGroup.clone(true);
+        model.traverse((object) => {
+          if (!(object instanceof THREE.Mesh)) return;
+          object.visible = true;
+          const layer = object.userData.printLayer;
+          if (layer === 'frontOuter' || layer === 'backOuter') arOuterPrints.push(object);
+          if (layer === 'frontInner' || layer === 'backInner') arInnerPrints.push(object);
+          if (object.userData.isAcrylicBody) arAcrylic = object;
+        });
+        arPrintMeshes = [...arOuterPrints, ...arInnerPrints];
+        if (arAcrylic) {
+          const mats = Array.isArray(arAcrylic.material) ? arAcrylic.material : [];
+          arDefaultMaterials = mats;
+          arEnvRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, stencilBuffer: false });
+          arBackfaceRT = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true, stencilBuffer: false });
+          arEnvRT.texture.colorSpace = THREE.SRGBColorSpace;
+          arBackfaceRT.texture.colorSpace = THREE.NoColorSpace;
+          arBackfaceMaterial = new THREE.ShaderMaterial({
+            side: THREE.BackSide,
+            depthWrite: true,
+            toneMapped: false,
+            vertexShader: `
+              varying vec3 vBackfaceNormal;
+              void main() {
+                vBackfaceNormal = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              varying vec3 vBackfaceNormal;
+              void main() {
+                gl_FragColor = vec4(normalize(vBackfaceNormal) * 0.5 + 0.5, 1.0);
+              }
+            `,
+          });
+          const cap = createAcrylicRefractionMaterial({
+            envMap: arEnvRT.texture,
+            backfaceMap: arBackfaceRT.texture,
+            frost: 0,
+            refractionStrength: 0.72,
+            thickness,
+          });
+          const side = createAcrylicRefractionMaterial({
+            envMap: arEnvRT.texture,
+            backfaceMap: arBackfaceRT.texture,
+            frost: 0.2,
+            transmission: 0.75,
+            refractionStrength: 0.32,
+            thickness,
+          });
+          arRefractionMaterials = [cap, side, cap];
+        }
         model.visible = false;
         spinGroup.add(model);
         modelRef.current = model;
@@ -377,6 +467,79 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
         canvas.removeEventListener('pointercancel', onPointerUp);
       };
 
+      const renderARFrame = () => {
+        const renderer = rendererRef.current;
+        const scene = sceneRef.current;
+        const camera = cameraRef.current;
+        const model = modelRef.current;
+        if (!renderer || !scene || !camera || !model || !arAcrylic || !arEnvRT || !arBackfaceRT || !arRefractionMaterials || !arBackfaceMaterial) {
+          renderer?.setRenderTarget(null);
+          renderer?.clear();
+          if (scene && camera) renderer?.render(scene, camera);
+          return;
+        }
+
+        const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+        const w = Math.max(1, Math.floor(size.x));
+        const h = Math.max(1, Math.floor(size.y));
+        if (arEnvRT.width !== w || arEnvRT.height !== h) {
+          arEnvRT.setSize(w, h);
+          arBackfaceRT.setSize(w, h);
+        }
+        const projectionScale = new THREE.Vector2(
+          camera.projectionMatrix.elements[0],
+          camera.projectionMatrix.elements[5],
+        );
+        const cap = arRefractionMaterials[0] as THREE.ShaderMaterial;
+        const side = arRefractionMaterials[1] as THREE.ShaderMaterial;
+        cap.uniforms.resolution.value.copy(size);
+        side.uniforms.resolution.value.copy(size);
+        cap.uniforms.projectionScale.value.copy(projectionScale);
+        side.uniforms.projectionScale.value.copy(projectionScale);
+
+        const frameVisible = frameRef.current?.visible ?? false;
+        if (frameRef.current) frameRef.current.visible = false;
+        model.visible = true;
+
+        // Pass A: inner prints become the refracted scene.
+        arAcrylic.visible = false;
+        arOuterPrints.forEach((mesh) => (mesh.visible = false));
+        arInnerPrints.forEach((mesh) => (mesh.visible = true));
+        renderer.setRenderTarget(arEnvRT);
+        renderer.clear();
+        renderer.render(scene, camera);
+
+        // Pass B: encode the acrylic back-face normal.
+        arInnerPrints.forEach((mesh) => (mesh.visible = false));
+        arAcrylic.visible = true;
+        arAcrylic.material = arBackfaceMaterial;
+        renderer.setRenderTarget(arBackfaceRT);
+        renderer.clear();
+        renderer.render(scene, camera);
+
+        // Pass C: same ordering as the desktop 3D preview.
+        arAcrylic.visible = false;
+        arInnerPrints.forEach((mesh) => (mesh.visible = true));
+        renderer.setRenderTarget(null);
+        renderer.clear();
+        renderer.render(scene, camera);
+
+        arAcrylic.visible = true;
+        arAcrylic.material = arRefractionMaterials;
+        renderer.render(scene, camera);
+
+        arAcrylic.visible = false;
+        arInnerPrints.forEach((mesh) => (mesh.visible = false));
+        arOuterPrints.forEach((mesh) => (mesh.visible = true));
+        if (frameRef.current) frameRef.current.visible = frameVisible;
+        renderer.render(scene, camera);
+
+        if (arDefaultMaterials) arAcrylic.material = arDefaultMaterials;
+        arAcrylic.visible = true;
+        arPrintMeshes.forEach((mesh) => (mesh.visible = true));
+        if (frameRef.current) frameRef.current.visible = frameVisible;
+      };
+
       // 渲染循环：锚点平滑跟随 + 模型大小平滑 + 自动旋转
       const axisTargetQuat = new THREE.Quaternion(); // 躺转模式的 axisGroup 目标朝向（复用，避免每帧分配）
       const tick = () => {
@@ -424,9 +587,7 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
             }
           }
         }
-        if (rendererRef.current && sceneRef.current && cameraRef.current) {
-          rendererRef.current.render(sceneRef.current, cameraRef.current);
-        }
+        renderARFrame();
       };
       tick();
 
@@ -493,6 +654,9 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
       };
 
       const detectLoop = async () => {
+        if (detectBusyRef.current) return;
+        detectBusyRef.current = true;
+        try {
         const result = await detectOnce();
         if (!active || closedRef.current) return;
         if (result.kind === 'match' && result.pose) {
@@ -506,6 +670,9 @@ export const ARPreviewOverlay: React.FC<ARPreviewOverlayProps> = ({
             }
             return 'searching';
           });
+        }
+        } finally {
+          detectBusyRef.current = false;
         }
       };
       intervalRef.current = window.setInterval(detectLoop, DETECT_INTERVAL);
